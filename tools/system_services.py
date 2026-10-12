@@ -1,5 +1,6 @@
 """System configuration shared by the Ubuntu installer and upgrade helper."""
 from pathlib import Path
+import os
 import re
 import subprocess
 
@@ -52,7 +53,10 @@ def configure_services(bind_dir=Path("/etc/bind"), mysql_dir=Path("/etc/mysql/ma
 
 def load_environment(path):
     """Load the trusted installer EnvironmentFile without displaying values."""
-    result = subprocess.run(["bash", "-c", 'set -a; source "$1"; env -0', "mika-env", str(path)], check=True, capture_output=True)
+    # An administrator may have sourced another service's env in this SSH shell.
+    # Only values actually defined by this file may count as existing settings.
+    base_env = {key: value for key, value in os.environ.items() if not key.startswith(("MIKA_", "MYCHA_", "TRIPAY_"))}
+    result = subprocess.run(["bash", "-c", 'set -a; source "$1"; env -0', "mika-env", str(path)], check=True, capture_output=True, env=base_env)
     return {key.decode(): value.decode() for entry in result.stdout.split(b"\0") if entry and b"=" in entry
             for key, value in [entry.split(b"=", 1)] if key.startswith((b"MIKA_", b"MYCHA_", b"TRIPAY_"))}
 
@@ -61,9 +65,13 @@ def add_environment(path, values):
     existing = load_environment(path)
     missing = {k: v for k, v in values.items() if k not in existing}
     # All additions here are non-secret hostnames, flags, and paths.
+    for key, value in missing.items():
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]+", key) or not re.fullmatch(r"[A-Za-z0-9_./:-]+", str(value)):
+            raise ValueError("Unsafe configuration addition")
+    needs_newline = missing and path.stat().st_size and not path.read_bytes().endswith(b"\n")
     with path.open("a") as stream:
+        if needs_newline:
+            stream.write("\n")
         for key, value in missing.items():
-            if not re.fullmatch(r"[A-Z][A-Z0-9_]+", key) or not re.fullmatch(r"[A-Za-z0-9_./:-]+", str(value)):
-                raise ValueError("Unsafe configuration addition")
             stream.write(f'{key}="{value}"\n')
     return {**existing, **missing}

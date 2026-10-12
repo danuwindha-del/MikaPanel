@@ -59,6 +59,7 @@ class Command(BaseCommand):
                         Notification.objects.create(user=job.account.owner, title=f"{job.account.domain}: pekerjaan selesai",
                             body=f"Tindakan {job.action} selesai diproses.", link=f"/accounts/{job.account_id}/")
                         self.stdout.write(f"OK {job.action}: {job.account.domain} ({settings.MIKA_PROVISION_MODE})")
+                        self.stdout.flush()
                     except Exception as exc:
                         # Do not store command output or env values; log only error class.
                         ProvisionJob.objects.filter(pk=job.pk).update(state="failed", error=type(exc).__name__, updated_at=timezone.now())
@@ -74,6 +75,7 @@ class Command(BaseCommand):
                         self.stderr.write(f"FAILED {job.account.domain}: {type(exc).__name__}")
                         if isinstance(exc, subprocess.CalledProcessError) and not job.action.startswith("db_"):
                             self.stderr.write(f"Command {exc.cmd[0]} exited {exc.returncode}: {(exc.stderr or '')[-2000:]}")
+                        self.stderr.flush()
                         if options["once"]:
                             raise CommandError("Provisioning failed; inspect service prerequisites") from exc
                 elif options["once"]:

@@ -45,3 +45,27 @@ def test_upgrade_source_files_exclude_runtime_and_credentials(tmp_path):
     for name in ["manage.py", "hosting/models.py", "var/config.json", ".venv/bin/python", ".git/config", ".env.production"]:
         path = tmp_path / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_text("fixture")
     assert {str(path.relative_to(tmp_path)) for path in source_files(tmp_path)} == {"manage.py", "hosting/models.py"}
+
+
+def test_inherited_shell_settings_do_not_hide_missing_flags_or_cross_service_secrets(tmp_path, monkeypatch):
+    path = tmp_path / "panel.env"
+    path.write_text('MIKA_SERVICE="panel"\n')
+    monkeypatch.setenv("MIKA_DNS_ENABLED", "0")
+    monkeypatch.setenv("TRIPAY_PRIVATE_KEY", "fixture-other-service")
+    values = load_environment(path)
+    assert values == {"MIKA_SERVICE": "panel"}
+    add_environment(path, {"MIKA_DNS_ENABLED": "1"})
+    assert load_environment(path)["MIKA_DNS_ENABLED"] == "1"
+    assert 'MIKA_DNS_ENABLED="1"' in path.read_text()
+    assert "fixture-other-service" not in path.read_text()
+
+
+def test_additions_do_not_join_previous_last_line_or_partially_write_invalid_values(tmp_path):
+    path = tmp_path / "panel.env"
+    path.write_text('MIKA_SERVICE="panel"')
+    add_environment(path, {"MIKA_DNS_ENABLED": "1"})
+    assert load_environment(path) == {"MIKA_SERVICE": "panel", "MIKA_DNS_ENABLED": "1"}
+    before = path.read_bytes()
+    with pytest.raises(ValueError):
+        add_environment(path, {"MIKA_MYSQL_ENABLED": "1", "BAD VALUE": "unsafe"})
+    assert path.read_bytes() == before
