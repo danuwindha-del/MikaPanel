@@ -20,6 +20,7 @@ Dua aplikasi Python terpisah untuk panel hosting dan toko hosting. Backend mengg
 | Suspend, resume, dan suspend saat kedaluwarsa | Login sekali pakai ke MikaPanels (60 detik) |
 | SSL mandiri pelanggan, HTTPS, header keamanan, blokir IP | Tiket, balasan admin, dan riwayat transaksi |
 | DNS BIND9: A/AAAA/CNAME/MX/TXT, TTL, edit/hapus/export | Administrasi produk dan kupon |
+| Publikasi DNS terverifikasi UDP/TCP, diagnostik dan repair terarah | |
 | MariaDB: buat database/user, ganti password, hapus, batas slot paket | Profil dan notifikasi aktivasi hosting |
 | Gauge Linux dan grafik request/error/bandwidth website | Desain responsif navy–emas |
 | Audit aktivitas, profil, notifikasi, administrasi paket | |
@@ -91,9 +92,9 @@ Jika gateway timeout, invoice masuk `review`. Aplikasi tidak membuat transaksi k
 .venv/bin/python tools/run.py shop check
 ```
 
-Pengujian memakai database sementara. Suite mencakup callback sah/palsu/berulang, jumlah invoice, urutan status, double charge, timeout, panel offline, provisioning demo, symlink/path traversal, CSRF, isolasi pelanggan, SSO, kupon, dan tiket. HTTP Tripay dimock; suite tidak membuktikan akses merchant sungguhan.
+Pengujian memakai database sementara. Suite mencakup callback sah/palsu/berulang, jumlah invoice, urutan status, double charge, timeout, panel offline, provisioning demo, symlink/path traversal, CSRF, isolasi pelanggan, SSO, kupon, dan tiket. DNS mencakup serial/SOA, include yang terputus, kegagalan TCP, dan rollback publikasi. HTTP Tripay dimock; suite tidak membuktikan akses merchant sungguhan.
 
-Opsional, setelah `tools/dev.py` berjalan, jalankan `tests/browser_smoke.py` menggunakan Python dengan Playwright dan Chromium tersedia. Pengujian membuat akun/pesanan demo lokal, memeriksa desktop/mobile, checkout, tiket, provisioning API, edit file, dan SSO. Screenshot disimpan di `var/screenshots/`. `tests/browser_features.py` memeriksa editor/folder, DNS CRUD, antrean database, keamanan, SSL/statistik, notifikasi, dan profil. Tes `tests/test_live_services.py` bersifat opt-in dengan `MIKA_TEST_MYSQL_SOCKET` (socket SQL sementara, jangan produksi) dan `MIKA_TEST_BIND_ROOT` (root ekstraksi binari BIND). Tanpa variabel tersebut, dua tes layanan nyata dilaporkan skipped.
+Opsional, setelah `tools/dev.py` berjalan, jalankan `tests/browser_smoke.py` menggunakan Python dengan Playwright dan Chromium tersedia. Pengujian membuat akun/pesanan demo lokal, memeriksa desktop/mobile, checkout, tiket, provisioning API, edit file, dan SSO. Screenshot disimpan di `var/screenshots/`. `tests/browser_features.py` memeriksa editor/folder, DNS CRUD, antrean database, keamanan, SSL/statistik, notifikasi, dan profil. Tes `tests/test_live_services.py` bersifat opt-in dengan `MIKA_TEST_MYSQL_SOCKET` (socket SQL sementara, jangan produksi) dan `MIKA_TEST_BIND_ROOT` (root ekstraksi binari BIND). Tanpa variabel tersebut, empat kasus layanan nyata dilaporkan skipped.
 
 ## Batas versi ini
 

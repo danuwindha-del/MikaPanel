@@ -1,11 +1,53 @@
 import ipaddress
 import re
 import subprocess
+import os
+import tempfile
+import time
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import F
 from .models import Account, DNSRecord, ProvisionJob
+from .dns_wire import query, zone_ready
+
+
+class DNSPublishError(RuntimeError):
+    pass
+
+
+def atomic_write(path, text):
+    fd, temporary = tempfile.mkstemp(prefix=".mika-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            os.fchmod(stream.fileno(), 0o644)
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def bind_command(*args):
+    return subprocess.run(list(args), check=True, capture_output=True, text=True, timeout=20)
+
+
+def verify_loaded(account):
+    deadline = time.monotonic() + 6
+    while True:
+        try:
+            bind_command("rndc", "zonestatus", account.domain)
+            for tcp in [False, True]:
+                response = query("127.0.0.1", account.domain, port=getattr(settings, "MIKA_DNS_PORT", 53), tcp=tcp, timeout=1)
+                if not zone_ready(response, account.domain, account.dns_serial, hostname(settings.MIKA_DNS_PRIMARY)):
+                    raise DNSPublishError("Zone belum memberikan SOA authoritative dengan serial terbaru")
+            return
+        except (OSError, ValueError, subprocess.SubprocessError, DNSPublishError) as exc:
+            if time.monotonic() >= deadline:
+                raise DNSPublishError("BIND belum melayani zone melalui UDP dan TCP; periksa named dan port 53") from exc
+            time.sleep(.2)
 
 
 def hostname(value):
@@ -117,28 +159,37 @@ def publish(account):
     previous = target.read_text() if target.exists() else None
     include = settings.MIKA_BIND_DIR / "mika-zones.conf"
     previous_include = include.read_text() if include.exists() else None
-    target.write_text(render_zone(account))
-    target.chmod(0o644)
+    atomic_write(target, render_zone(account))
     try:
-        subprocess.run(["named-checkzone", account.domain, str(target)], check=True, capture_output=True, timeout=20)
+        bind_command("named-checkzone", account.domain, str(target))
         zones = []
         for item in Account.objects.order_by("domain"):
             zone = target_dir / f"{item.system_user}.zone"
             if zone.exists():
                 from .validation import domain_name
                 zones.append(f'zone "{domain_name(item.domain)}" {{ type primary; file "{zone}"; }};')
-        include.write_text("\n".join(zones) + "\n")
-        include.chmod(0o644)
-        subprocess.run(["named-checkconf"], check=True, capture_output=True, timeout=20)
-        subprocess.run(["rndc", "reload"], check=True, capture_output=True, timeout=20)
+        atomic_write(include, "\n".join(zones) + "\n")
+        bind_command("named-checkconf", "-z")
+        configured = bind_command("named-checkconf", "-l")
+        if not any(line.split() and line.split()[0].rstrip(".") == account.domain for line in configured.stdout.splitlines()):
+            raise DNSPublishError("Zone tidak ada pada konfigurasi BIND aktif; include mika-zones.conf belum terhubung")
+        bind_command("rndc", "reconfig")
+        bind_command("rndc", "reload", account.domain)
+        verify_loaded(account)
     except Exception:
         if previous is None:
             target.unlink(missing_ok=True)
         else:
-            target.write_text(previous)
+            atomic_write(target, previous)
         if previous_include is None:
             include.unlink(missing_ok=True)
         else:
-            include.write_text(previous_include)
+            atomic_write(include, previous_include)
+        try:
+            bind_command("rndc", "reconfig")
+            if previous is not None:
+                bind_command("rndc", "reload", account.domain)
+        except (OSError, subprocess.SubprocessError, RuntimeError):
+            pass
         raise
-    Account.objects.filter(pk=account.pk).update(dns_state="published")
+    Account.objects.filter(pk=account.pk, dns_serial=account.dns_serial).update(dns_state="published")

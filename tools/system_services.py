@@ -29,7 +29,7 @@ def dns_preflight(bind_dir=Path("/etc/bind")):
             raise RuntimeError("BIND memiliki options khusus. Simpan dan integrasikan konfigurasi authoritative sebelum update; konfigurasi tidak ditimpa.")
 
 
-def configure_services(bind_dir=Path("/etc/bind"), mysql_dir=Path("/etc/mysql/mariadb.conf.d"), nginx_dir=Path("/etc/nginx/conf.d")):
+def configure_dns(bind_dir=Path("/etc/bind")):
     dns_preflight(bind_dir)
     (bind_dir / "mika-zones").mkdir(mode=0o755, exist_ok=True)
     include = bind_dir / "mika-zones.conf"
@@ -40,15 +40,21 @@ def configure_services(bind_dir=Path("/etc/bind"), mysql_dir=Path("/etc/mysql/ma
     if 'include "' + str(include) + '";' not in content:
         local.write_text(content + f'\n{MARKER}\ninclude "{include}";\n')
     (bind_dir / "named.conf.options").write_text(MARKER + '\noptions {\n    directory "/var/cache/bind";\n    recursion no;\n    allow-query { any; };\n    allow-transfer { none; };\n    dnssec-validation auto;\n    listen-on { any; };\n    listen-on-v6 { none; };\n};\n')
+    (bind_dir / "mika-zones").chmod(0o755)
+    for path in [include, local, bind_dir / "named.conf.options"]:
+        path.chmod(0o644)
+    subprocess.run(["named-checkconf"], check=True)
+
+
+def configure_services(bind_dir=Path("/etc/bind"), mysql_dir=Path("/etc/mysql/mariadb.conf.d"), nginx_dir=Path("/etc/nginx/conf.d")):
+    configure_dns(bind_dir)
     mysql_dir.mkdir(parents=True, exist_ok=True)
     (mysql_dir / "60-mikapanels.cnf").write_text(MARKER + '\n[mysqld]\nbind-address=127.0.0.1\n')
     nginx_dir.mkdir(parents=True, exist_ok=True)
     (nginx_dir / "mika-logging.conf").write_text("log_format mika '$msec $status $body_bytes_sent';\n")
-    (bind_dir / "mika-zones").chmod(0o755)
-    for path in [include, local, bind_dir / "named.conf.options", mysql_dir / "60-mikapanels.cnf", nginx_dir / "mika-logging.conf"]:
+    for path in [mysql_dir / "60-mikapanels.cnf", nginx_dir / "mika-logging.conf"]:
         path.chmod(0o644)
-    for command in [["named-checkconf"], ["nginx", "-t"]]:
-        subprocess.run(command, check=True)
+    subprocess.run(["nginx", "-t"], check=True)
 
 
 def load_environment(path):

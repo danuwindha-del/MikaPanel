@@ -8,6 +8,8 @@ import socket
 import struct
 import subprocess
 import time
+import base64
+import secrets
 import pytest
 import pymysql
 from hosting import dns
@@ -125,5 +127,94 @@ def test_live_bind_zone_validation_and_authoritative_answers(panel, account, tmp
             assert (28, socket.inet_pton(socket.AF_INET6, "2001:db8::42")) in query("ipv6." + account.domain, 28, port)
             assert any(kind == 15 and payload[:2] == b"\0\x0a" for kind, payload in query(account.domain, 15, port))
             assert any(kind == 16 and b"caf\xc3\xa9" in payload for kind, payload in query("_verify." + account.domain, 16, port))
+        finally:
+            server.terminate(); server.wait(timeout=10)
+
+
+@pytest.mark.parametrize("connected_include", [True, False])
+def test_live_bind_publication_reconfig_serial_udp_tcp_and_missing_include(panel, account, tmp_path, monkeypatch, connected_include):
+    from hosting.dns_wire import query as wire_query, zone_ready
+    root = os.environ.get("MIKA_TEST_BIND_ROOT")
+    if not root:
+        pytest.skip("Real BIND binaries not supplied")
+    root = Path(root)
+    env = {**os.environ, "LD_LIBRARY_PATH": str(root / "usr/lib/x86_64-linux-gnu")}
+    def free_port():
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            return listener.getsockname()[1]
+    dns_port, control_port = free_port(), free_port()
+    panel.MIKA_PROVISION_MODE = "system"
+    panel.MIKA_DNS_ENABLED = True
+    panel.MIKA_DNS_PORT = dns_port
+    panel.MIKA_BIND_DIR = tmp_path / "bind"
+    panel.MIKA_BIND_DIR.mkdir()
+    include = panel.MIKA_BIND_DIR / "mika-zones.conf"
+    include.write_text("")
+    secret = base64.b64encode(secrets.token_bytes(32)).decode()
+    key = f'key "mika-test" {{ algorithm hmac-sha256; secret "{secret}"; }};'
+    config = tmp_path / "named.conf"
+    config.write_text(key + f' options {{ directory "{tmp_path}"; recursion no; listen-on port {dns_port} {{ 127.0.0.1; }}; listen-on-v6 {{ none; }}; pid-file "{tmp_path}/named.pid"; session-keyfile "{tmp_path}/session.key"; }}; controls {{ inet 127.0.0.1 port {control_port} allow {{ 127.0.0.1; }} keys {{ "mika-test"; }}; }};' + (f'include "{include}";' if connected_include else ""))
+    rndc_config = tmp_path / "rndc.conf"
+    rndc_config.write_text(key + f' options {{ default-server 127.0.0.1; default-port {control_port}; default-key "mika-test"; }};')
+    config.chmod(0o600); rndc_config.chmod(0o600)
+    def bind_command(*args):
+        name, *rest = args
+        if name == "rndc":
+            command = [str(root / "usr/sbin/rndc"), "-c", str(rndc_config), *rest]
+        elif name == "named-checkconf":
+            command = [str(root / "usr/bin/named-checkconf"), *rest, str(config)]
+        else:
+            command = [str(root / "usr/bin/named-checkzone"), *rest]
+        return subprocess.run(command, check=True, env=env, capture_output=True, text=True, timeout=20)
+    monkeypatch.setattr(dns, "bind_command", bind_command)
+    with (tmp_path / "publication.log").open("w") as log:
+        server = subprocess.Popen([str(root / "usr/sbin/named"), "-g", "-c", str(config), "-n", "1", "-U", "1"], env=env, stdout=log, stderr=log)
+        try:
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    bind_command("rndc", "status")
+                    break
+                except subprocess.CalledProcessError:
+                    if server.poll() is not None or time.monotonic() >= deadline:
+                        raise AssertionError("Isolated BIND control channel failed: " + log.name)
+                    time.sleep(.1)
+            if not connected_include:
+                with pytest.raises(dns.DNSPublishError, match="include"):
+                    dns.publish(account)
+                assert include.read_text() == ""
+                account.refresh_from_db()
+                assert account.dns_state != "published"
+                assert wire_query("127.0.0.1", account.domain, port=dns_port)["status"] == "REFUSED"
+                return
+            dns.publish(account)
+            account.refresh_from_db()
+            assert account.dns_state == "published"
+            for tcp in [False, True]:
+                response = wire_query("127.0.0.1", account.domain, port=dns_port, tcp=tcp)
+                assert zone_ready(response, account.domain, account.dns_serial, panel.MIKA_DNS_PRIMARY)
+            account.dns_records.filter(name="@", kind="A").update(value="203.0.113.42")
+            dns.enqueue_sync(account)
+            dns.publish(account)
+            account.refresh_from_db()
+            assert account.dns_serial == 2 and account.dns_state == "published"
+            for tcp in [False, True]:
+                response = wire_query("127.0.0.1", account.domain, "A", port=dns_port, tcp=tcp)
+                assert any(record["value"] == "203.0.113.42" for record in response["records"])
+            # A failed verification restores the previously published zone file/config
+            # and reloads the previous records; a reload acknowledgement alone is insufficient.
+            previous_zone = (panel.MIKA_BIND_DIR / "mika-zones" / f"{account.system_user}.zone").read_text()
+            account.dns_records.filter(name="@", kind="A").update(value="203.0.113.99")
+            dns.enqueue_sync(account)
+            def failed_verification(account):
+                raise dns.DNSPublishError("fixture verification failure")
+            monkeypatch.setattr(dns, "verify_loaded", failed_verification)
+            with pytest.raises(dns.DNSPublishError, match="fixture"):
+                dns.publish(account)
+            assert (panel.MIKA_BIND_DIR / "mika-zones" / f"{account.system_user}.zone").read_text() == previous_zone
+            assert any(record["value"] == "203.0.113.42" for record in wire_query("127.0.0.1", account.domain, "A", port=dns_port)["records"])
+            account.refresh_from_db()
+            assert account.dns_state == "pending"
         finally:
             server.terminate(); server.wait(timeout=10)

@@ -62,6 +62,8 @@ Helper menyimpan backup privat kode, konfigurasi, database SQLite konsisten, dan
 
 Sesudah pembaruan, ikuti [DNS](DNS.md) untuk A/glue `ns1`/`ns2`, port 53, dan delegasi domain pelanggan. Profil, statistik, file manager baru, database, SSL, serta keamanan dijelaskan di [Workspace](WORKSPACE.md). Migrasi juga diperlukan untuk halaman notifikasi MychaHost.
 
+Untuk masalah nameserver gunakan `tools/check_dns.py --domain DOMAIN` dan helper khusus `tools/repair_dns.py` dari clone terbaru, sesuai [perbaikan DNS](DNS.md#pemeriksaan-dan-perbaikan-terarah). Helper DNS tidak melakukan pembaruan aplikasi penuh atau migrasi, dan tidak mengubah Cloudflare/registrar.
+
 ## Pemeriksaan
 
 ```bash
