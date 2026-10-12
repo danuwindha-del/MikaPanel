@@ -7,7 +7,8 @@ Hasil pada cloud, Python 3.12:
 - Seed/configure berulang mempertahankan konfigurasi dan perubahan katalog.
 - `check` kedua service: tidak ada isu.
 - `makemigrations --check --dry-run`: tidak ada perubahan model yang belum dimigrasi.
-- Suite pytest: **47 passed**, tidak ada test skipped/xfail.
+- Suite pytest setelah perbaikan prompt installer: **50 passed**, tidak ada test skipped/xfail.
+- Preflight password installer: password pendek/numerik dan konfirmasi berbeda diminta ulang tanpa mencetak password. Pengujian standalone tanpa konfigurasi service juga berhasil, tanpa perubahan sistem.
 - Browser Chromium pada desktop 1440 px dan ponsel 390 px: halaman depan dan paket tampil, tidak ada overflow horizontal. Daftar akun, checkout/invoice, tiket, API provisioning demo, login admin, edit file, dan SSO sekali pakai antar aplikasi berhasil.
 - Supervisor lokal: kedua web dan worker berjalan, endpoint health memverifikasi koneksi database.
 - `install_vps.py --plan-only`: berhasil dan tidak mengubah sistem.

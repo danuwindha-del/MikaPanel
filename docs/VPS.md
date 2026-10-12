@@ -12,6 +12,8 @@ VPS Ubuntu 24.04 baru, disarankan minimal 2 vCPU, RAM 2 GB, disk 20 GB untuk pen
 
 Gunakan server pengujian terlebih dahulu. Installer menginstal Nginx, PHP 8.3 FPM/CLI, Python venv, Certbot, dan CA certificates. Ia tidak menghapus aplikasi atau konfigurasi yang sudah ada; bentrok instalasi menyebabkan proses berhenti.
 
+Password admin dibuat baru untuk panel/toko, minimal 12 karakter, bukan hanya angka, dan bukan password umum. Saat diketik, karakter tidak ditampilkan. Jika password ditolak atau konfirmasi berbeda, installer menjelaskan alasannya dan meminta ulang pada tahap password, sebelum memasang komponen sistem.
+
 ## Hasil instalasi
 
 | Lokasi/layanan | Fungsi |

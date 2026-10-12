@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from common.password_policy import PASSWORD_VALIDATORS
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SERVICE = os.getenv("MIKA_SERVICE", "panel")
@@ -34,12 +35,7 @@ DATA_DIR = Path(os.getenv("MIKA_DATA_DIR", str(BASE_DIR / "var")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": DATA_DIR / f"{SERVICE}.sqlite3",
                           "OPTIONS": {"timeout": 30}}}
-AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 12}},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-]
+AUTH_PASSWORD_VALIDATORS = PASSWORD_VALIDATORS
 LANGUAGE_CODE = "id"
 TIME_ZONE = "Asia/Jakarta"
 USE_I18N = True

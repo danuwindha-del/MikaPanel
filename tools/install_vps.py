@@ -24,6 +24,38 @@ CONFIG = Path("/etc/mikapanels")
 DATA = Path("/var/lib/mikapanels")
 
 
+def prompt_admin_password():
+    from django.conf import settings as password_settings
+    from django.contrib.auth.password_validation import get_password_validators, validate_password
+    from django.core.exceptions import ValidationError
+    # Installer runs before service configuration exists. Validators do not need a database.
+    if not password_settings.configured:
+        password_settings.configure(USE_I18N=False)
+    if str(SOURCE) not in sys.path:
+        sys.path.insert(0, str(SOURCE))
+    from common.password_policy import PASSWORD_VALIDATORS
+    validators = get_password_validators(PASSWORD_VALIDATORS)
+    reasons = {
+        "password_too_short": "Password terlalu pendek. Minimal 12 karakter. Silakan ketik ulang.",
+        "password_too_common": "Password terlalu umum. Gunakan password yang lebih unik.",
+        "password_entirely_numeric": "Password tidak boleh hanya berisi angka.",
+    }
+    console.print("Buat password baru untuk akun admin panel/toko. Ketikan password tidak ditampilkan di terminal.")
+    while True:
+        password = getpass.getpass("Password admin (minimal 12 karakter): ")
+        try:
+            validate_password(password, password_validators=validators)
+        except ValidationError as exc:
+            for error in exc.error_list:
+                console.print(reasons.get(error.code, "Password belum memenuhi aturan keamanan."), style="red", markup=False)
+            continue
+        confirmation = getpass.getpass("Ulangi password: ")
+        if password != confirmation:
+            console.print("Kedua password tidak sama. Silakan ketik ulang password dan konfirmasinya.", style="red")
+            continue
+        return password
+
+
 def run(args, env=None):
     console.print(f"[dim]Menjalankan: {args[0]}[/dim]")
     subprocess.run(args, check=True, env=env, cwd=DEST if DEST.exists() else SOURCE)
@@ -102,9 +134,7 @@ def main():
     email = Prompt.ask("Email admin dan Let's Encrypt")
     if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
         raise SystemExit("Email tidak valid")
-    password = getpass.getpass("Password admin (minimal 12 karakter): ")
-    if len(password) < 12 or password != getpass.getpass("Ulangi password: "):
-        raise SystemExit("Password tidak valid atau tidak sama")
+    password = prompt_admin_password()
     mode = Prompt.ask("Mode Tripay", choices=["sandbox", "production"], default="sandbox")
     merchant = Prompt.ask("Kode merchant Tripay (boleh kosong)", default="")
     api_key = getpass.getpass("API key Tripay (boleh kosong): ")
