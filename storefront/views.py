@@ -93,7 +93,7 @@ def pay(request, pk):
         Order.objects.filter(pk=pk, status="unpaid").update(status="pending", payment_reference=data["reference"],
             payment_url=data["checkout_url"], payment_method=method, payment_total=total, payment_fee=fee,
             expires_at=timezone.now() + timedelta(days=1))
-        messages.success(request, "Invoice Tripay dibuat. Lanjutkan melalui halaman pembayaran resmi.")
+        return redirect(data["checkout_url"])
     except (GatewayError, ValueError, TypeError, KeyError, IntegrityError) as exc:
         messages.error(request, str(exc) if isinstance(exc, GatewayError) else "Respons pembayaran perlu diperiksa admin.")
         # Keep claim until the admin reconciles the reference in Tripay; timeout is ambiguous.

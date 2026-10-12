@@ -124,7 +124,8 @@ def test_double_click_does_not_create_second_charge(client, shop, order, user):
     client.force_login(user)
     data = {"reference": "T-second", "checkout_url": "https://tripay.co.id/checkout/T-second", "amount": 20000, "fee_customer": 1000}
     with patch("storefront.views.create_payment", return_value=data) as gateway:
-        client.post(f"/orders/{order.pk}/pay/", {"method": "BRIVA"})
+        first = client.post(f"/orders/{order.pk}/pay/", {"method": "BRIVA"})
+        assert first.status_code == 302 and first.url == data["checkout_url"]
         client.post(f"/orders/{order.pk}/pay/", {"method": "BRIVA"})
         assert gateway.call_count == 1
     order.refresh_from_db()

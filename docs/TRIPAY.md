@@ -16,6 +16,20 @@ Atur nilai di konfigurasi **shop**:
 
 Installer meminta kredensial dengan prompt tersembunyi. Di lokal, edit `var/config.json` bagian `shop` secara privat dan restart proses. Jangan menaruh nilai kunci di source, screenshot, chat, atau Git. Private key HMAC harus tersedia sebagai nilai asli pada proses toko; placeholder proxy-secret tidak dapat dipakai untuk tanda tangan lokal.
 
+## Checkout dan pemeriksaan koneksi
+
+Memilih paket membuka form konfigurasi hosting. Setelah pelanggan membuat invoice, pilih metode pembayaran dan klik **Buat pembayaran Tripay**. Jika gateway berhasil membuat transaksi dan jumlahnya sesuai invoice, aplikasi menyimpan referensi lalu langsung mengarahkan pelanggan ke checkout Tripay. Invoice pending tetap menyediakan tautan **Lanjutkan pembayaran** ketika pelanggan membukanya kembali.
+
+Untuk pemeriksaan read-only pada VPS, jalankan sebagai root dengan environment shop dimuat:
+
+```bash
+sudo bash -c 'set -a; . /etc/mikapanels/shop.env; set +a; cd /opt/mikapanels; .venv/bin/python manage.py check_tripay'
+```
+
+Perintah hanya menampilkan mode, status terisi/kosong untuk nama kredensial, serta ketersediaan channel. Nilai kunci tidak dicetak dan pembayaran tidak dibuat. Keberhasilan endpoint channel membuktikan akses API key, bukan signature private key/kode merchant; checkout sandbox tetap perlu diuji.
+
+Kode VPS disalin installer ke `/opt/mikapanels`, tanpa metadata Git. `git pull` pada folder clone saja belum memperbarui aplikasi yang sedang berjalan. Untuk patch checkout ini, ambil commit terbaru pada clone, salin `storefront/views.py` dan `storefront/management/commands/check_tripay.py` ke lokasi yang sama di `/opt/mikapanels`, lalu restart `mychahost` dan `mycha-orders`. Patch tidak mengubah model/database atau konfigurasi kredensial.
+
 ## Verifikasi
 
 Signature transaksi = HMAC-SHA256(private key, merchant code + merchant reference + amount). Callback diverifikasi terhadap **raw body** menggunakan header `X-Callback-Signature`, serta `X-Callback-Event: payment_status`.
