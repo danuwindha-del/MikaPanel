@@ -11,9 +11,6 @@ import sqlite3
 import subprocess
 import sys
 import tarfile
-import time
-import urllib.request
-import json
 from urllib.parse import urlsplit
 
 SOURCE = Path(__file__).resolve().parent.parent
@@ -116,21 +113,20 @@ def main():
         run(["systemctl", "restart", "named", "mariadb", "php8.3-fpm"])
         run(["systemctl", "start", *SERVICES])
         run(["systemctl", "is-active", *SERVICES, "named", "mariadb"])
+        from vps_health import probe_health, wait_health
         for service, values in environments.items():
-            url = values["MIKA_PANEL_URL" if service == "panel" else "MYCHA_PUBLIC_URL"].rstrip("/") + "/health/"
-            deadline = time.monotonic() + 30
-            while True:
-                try:
-                    with urllib.request.urlopen(url, timeout=5) as response:
-                        result = json.load(response)
-                    if result == {"status": "ok", "service": service}:
-                        break
-                except (OSError, ValueError):
-                    pass
-                if time.monotonic() >= deadline:
-                    raise RuntimeError(f"Health {service} belum sesuai; periksa journalctl.")
-                time.sleep(1)
-            print(f"Health {service}: OK")
+            url = values["MIKA_PANEL_URL" if service == "panel" else "MYCHA_PUBLIC_URL"]
+            port = 8001 if service == "panel" else 8002
+            backend = wait_health(url, service, backend_port=port)
+            print(f"Health {service} / Gunicorn lokal: {backend.detail}", flush=True)
+            if not backend.ok:
+                raise RuntimeError(f"Aplikasi {service} lokal belum sehat ({backend.detail}); periksa journalctl -u {'mikapanels' if service == 'panel' else 'mychahost'}.")
+            public = wait_health(url, service)
+            print(f"Health {service} / HTTPS domain: {public.detail}", flush=True)
+            if not public.ok:
+                local_tls = probe_health(url, service, local_https=True)
+                print(f"Health {service} / Nginx TLS lokal: {local_tls.detail}", flush=True)
+                raise RuntimeError(f"Aplikasi {service} lokal sehat, tetapi HTTPS domain gagal ({public.detail}). Jalankan tools/check_vps.py untuk membedakan DNS, TLS, dan proxy Nginx.")
     except Exception:
         print(f"Update berhenti. Cadangan kode, konfigurasi, database, dan venv lama ada di {backup}. Periksa pesan terakhir sebelum melanjutkan; tidak ada rollback database otomatis.", file=sys.stderr)
         raise

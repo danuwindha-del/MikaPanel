@@ -91,6 +91,12 @@ File environment menggunakan nilai berpetik dan tidak berisi ekspansi shell. Jan
 
 ## Pemulihan instalasi yang terhenti
 
+Jika updater berhenti pada `Health panel belum sesuai`, kode dan migrasi mungkin sudah terpasang: pemeriksaan itu berjalan setelah layanan dimulai. Jangan langsung menjalankan ulang upgrade atau menghapus data. Pada versi terbaru, pemeriksaan menyebutkan apakah Gunicorn lokal gagal, atau aplikasi lokal sehat tetapi HTTPS domain gagal.
+
+Untuk diagnosis tanpa memperbarui instalasi, gunakan `sudo python3 tools/check_vps.py` dari clone source terbaru. Script hanya membaca environment secara privat dan memeriksa systemd, HTTP Gunicorn dengan Host/forwarded HTTPS yang benar, TLS Nginx melalui loopback dengan SNI/verifikasi sertifikat tetap aktif, serta HTTPS domain. Ia tidak menampilkan kunci atau isi respons error.
+
+Gunicorn gagal → periksa log layanan panel/toko. Gunicorn sehat tetapi Nginx lokal HTTP 502 → periksa proxy/upstream Nginx. Kegagalan verifikasi TLS → periksa sertifikat/hostname/chain/waktu server. Nginx TLS lokal sehat tetapi HTTPS domain gagal → periksa resolusi domain, A/AAAA, firewall provider, dan akses VPS ke IP publiknya sendiri. Endpoint lokal saja tidak membuktikan domain dapat diakses publik; pemeriksaan domain tetap diwajibkan oleh updater.
+
 Installer berhenti pada perintah gagal dan mempertahankan data. Jangan menghapus database/konfigurasi supaya installer bisa diulang. Periksa langkah terakhir, backup direktori konfigurasi dan database, lalu lanjutkan operasi yang gagal secara manual. Misalnya kegagalan TLS akibat DNS diselesaikan dengan DNS yang benar dan mengulang perintah Certbot dari installer. Gunakan log systemd untuk kegagalan web/worker. `--plan-only` tidak membuktikan pemasangan sistem berhasil.
 
 Worker menandai pekerjaan gagal dan menyimpan kelas error. Perbaiki prasyarat, lalu pilih retry pada akun di panel. Job `running` yang ditinggalkan saat mesin mati dikembalikan ke pending oleh startup worker `--recover`. Hanya satu worker provisioning diizinkan oleh file lock. Jika suspend/resume/SSL gagal, status akun sebelumnya dipertahankan; admin dapat mencoba tindakan lagi setelah job gagal selesai.
