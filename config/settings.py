@@ -73,6 +73,13 @@ MIKA_PHP_SOCKET = os.getenv("MIKA_PHP_SOCKET", "/run/php/php8.3-fpm.sock")
 MIKA_SERVER_IP = os.getenv("MIKA_SERVER_IP", "127.0.0.1")
 MIKA_CERTBOT_EMAIL = os.getenv("MIKA_CERTBOT_EMAIL", "")
 MIKA_NAMESERVERS = os.getenv("MIKA_NAMESERVERS", "").split(",")
+MIKA_DNS_ENABLED = os.getenv("MIKA_DNS_ENABLED", "0") == "1"
+MIKA_DNS_PRIMARY = os.getenv("MIKA_DNS_PRIMARY", "ns1.mychahost.my.id")
+MIKA_DNS_SECONDARY = os.getenv("MIKA_DNS_SECONDARY", "ns2.mychahost.my.id")
+MIKA_BIND_DIR = Path(os.getenv("MIKA_BIND_DIR", "/etc/bind"))
+MIKA_MYSQL_ENABLED = os.getenv("MIKA_MYSQL_ENABLED", "0") == "1"
+MIKA_MYSQL_SOCKET = os.getenv("MIKA_MYSQL_SOCKET", "/run/mysqld/mysqld.sock")
+MIKA_NGINX_LOG_DIR = Path(os.getenv("MIKA_NGINX_LOG_DIR", "/var/log/nginx"))
 TRIPAY_MODE = os.getenv("TRIPAY_MODE", "sandbox")
 TRIPAY_API_KEY = os.getenv("TRIPAY_API_KEY", "")
 TRIPAY_PRIVATE_KEY = os.getenv("TRIPAY_PRIVATE_KEY", "")

@@ -73,6 +73,8 @@ def provision(request):
                 raise ValueError("Customer identity mismatch")
             account = Account.objects.create(external_id=external_id, domain=domain, owner=owner, plan=plan,
                                              kind=kind, expires_at=timezone.now() + timedelta(days=days))
+            from .dns import ensure_records
+            ensure_records(account)
             ProvisionJob.objects.create(account=account, action="create")
         return JsonResponse(serialize(account), status=201)
     except (KeyError, ValueError, TypeError, ValidationError, Plan.DoesNotExist, UnicodeError):

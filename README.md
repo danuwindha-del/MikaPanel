@@ -1,8 +1,8 @@
 # MikaPanels × MychaHost
 
-Dua aplikasi Python terpisah untuk panel hosting dan toko hosting. Backend menggunakan Django 5.2, installer terminal menggunakan Rich, dan web menggunakan HTML/CSS dengan tema gelap mint–lavender yang responsif. Tidak membutuhkan Node.js untuk build frontend.
+Dua aplikasi Python terpisah untuk panel hosting dan toko hosting. Backend menggunakan Django 5.2, installer terminal menggunakan Rich, dan web menggunakan HTML/CSS dengan tema navy–emas, landing premium, dan dashboard terang yang responsif. Tidak membutuhkan Node.js untuk build frontend.
 
-**Versi awal yang dapat dijalankan untuk hosting website statis/PHP di Ubuntu 24.04.** Ini belum memiliki seluruh kemampuan cPanel. Provisioning lokal dan alur aplikasi diuji; pemasangan sistem VPS, penerbitan sertifikat, dan transaksi Tripay sungguhan masih memerlukan pengujian pada server/merchant Anda.
+**Versi awal yang dapat dijalankan untuk hosting website statis/PHP di Ubuntu 24.04.** Ini belum memiliki seluruh kemampuan cPanel. Provisioning lokal, alur aplikasi, MariaDB socket terisolasi, dan DNS BIND9 nyata diuji; pemasangan sistem VPS, penerbitan sertifikat, dan transaksi Tripay sungguhan masih memerlukan pengujian pada server/merchant Anda.
 
 ## Fitur yang tersedia
 
@@ -15,11 +15,14 @@ Dua aplikasi Python terpisah untuk panel hosting dan toko hosting. Backend mengg
 | Antrean worker dengan retry melalui panel | Harga snapshot, kupon persen, dan invoice |
 | Akun Linux dan Nginx vhost dalam mode sistem | Tripay sandbox/production, VA/QRIS sesuai merchant |
 | PHP-FPM pool per website | Callback HMAC dengan pemeriksaan invoice dan jumlah |
-| Upload/edit file utama dengan proteksi symlink | Pencegahan double-click pembayaran |
-| Download ZIP file utama | Retry provisioning pesanan berbayar |
+| Folder/file, editor sintaks, upload/download, rename, hapus, ekstrak ZIP | Pencegahan double-click pembayaran |
+| Backup ZIP website beserta subfolder | Retry provisioning pesanan berbayar |
 | Suspend, resume, dan suspend saat kedaluwarsa | Login sekali pakai ke MikaPanels (60 detik) |
-| Pemasangan SSL melalui antrean admin setelah DNS siap | Tiket, balasan admin, dan riwayat transaksi |
-| Audit aktivitas dan administrasi paket | Administrasi produk dan kupon |
+| SSL mandiri pelanggan, HTTPS, header keamanan, blokir IP | Tiket, balasan admin, dan riwayat transaksi |
+| DNS BIND9: A/AAAA/CNAME/MX/TXT, TTL, edit/hapus/export | Administrasi produk dan kupon |
+| MariaDB: buat database/user, ganti password, hapus, batas slot paket | Profil dan notifikasi aktivasi hosting |
+| Gauge Linux dan grafik request/error/bandwidth website | Desain responsif navy–emas |
+| Audit aktivitas, profil, notifikasi, administrasi paket | |
 
 Paket contoh: **Launch Rp19.000**, **Stellar Rp49.000**, **Nebula Rp99.000** per bulan. Admin dapat mengubah harga di MychaHost `/admin/`; slug `panel_plan` harus sesuai paket aktif di MikaPanels. Seed tidak menimpa perubahan admin.
 
@@ -53,14 +56,14 @@ Untuk database baru/upgrade, jalankan `tools/run.py panel migrate --noinput` dan
 
 ## Instalasi VPS
 
-Ikuti [panduan VPS](docs/VPS.md). Installer memerlukan VPS **Ubuntu 24.04 baru**, akses sudo/root, IPv4 publik, dua domain, DNS yang sudah mengarah ke VPS, dan port 80/443 yang terbuka. Mulai dengan:
+Ikuti [panduan VPS](docs/VPS.md). Installer memerlukan VPS **Ubuntu 24.04 baru**, akses sudo/root, IPv4 publik, dua domain, DNS yang sudah mengarah ke VPS, dan port 80/443 serta TCP/UDP 53 yang terbuka. Mulai dengan:
 
 ```bash
 .venv/bin/python tools/install_vps.py --plan-only
 sudo .venv/bin/python tools/install_vps.py
 ```
 
-Installer interaktif meminta domain panel/toko, IP, email, password admin, mode dan kredensial Tripay, serta channel merchant. Token API dan secret key dibuat acak. Sumber aplikasi disalin ke `/opt/mikapanels`; data ada di `/var/lib/mikapanels`; konfigurasi rahasia ada di `/etc/mikapanels` dan tidak ditampilkan.
+Installer interaktif meminta domain panel/toko, IP, email, nameserver utama/kedua, password admin, mode dan kredensial Tripay, serta channel merchant. Token API dan secret key dibuat acak. Sumber aplikasi disalin ke `/opt/mikapanels`; data ada di `/var/lib/mikapanels`; konfigurasi rahasia ada di `/etc/mikapanels` dan tidak ditampilkan.
 
 ## Hosting manual untuk pengujian
 
@@ -68,9 +71,9 @@ Login sebagai admin MikaPanels, buka `/dashboard/`, lalu pilih **Buat hosting**.
 
 Akun diberi external ID `MANUAL-…`, masuk antrean provisioning yang sama, dan dicatat dalam audit. Tidak ada invoice, transaksi Tripay, atau pesanan MychaHost yang dibuat. Tunggu status **Aktif**, lalu buka detail akun untuk upload/edit file. Dalam mode demo hanya direktori lokal yang dibuat; pada VPS mode sistem worker menyiapkan hosting nyata. Akun tetap ditangguhkan otomatis setelah masa aktifnya habis.
 
-Untuk tes dengan `test.mychahost.my.id`, buat A record `test` menuju IP VPS. Untuk SSL, siapkan alias `www.test` juga, lalu admin memilih **Pasang SSL** dari detail akun setelah DNS siap.
+Untuk tes dengan `test.mychahost.my.id`, buat A record `test` menuju IP VPS. Untuk SSL, siapkan alias `www.test` juga, lalu pemilik memilih **Ajukan SSL** dari tab SSL setelah DNS siap.
 
-Pada VPS yang sudah terpasang, helper `tools/update_manual_hosting.sh` memperbarui file fitur ini dari checkout source terbaru, menyimpan backup kode, collectstatic, restart panel, dan memeriksa health. Jalankan `bash tools/update_manual_hosting.sh --plan-only` untuk melihat rencana, lalu `sudo bash tools/update_manual_hosting.sh` dari source terbaru. Konfigurasi dan database tidak diubah. Panduan lengkap ada pada [VPS](docs/VPS.md).
+Pada VPS yang sudah terpasang, gunakan `tools/update_vps.py` dari clone source baru. Helper menyimpan backup privat kode/config/SQLite, memasang dependensi BIND9/MariaDB, menjalankan migrasi dan collectstatic, menyegarkan hosting lama, dan memeriksa health. Environment serta kunci Tripay yang ada dipertahankan. Helper `update_manual_hosting.sh` kini mengarah ke updater lengkap agar tidak memasang template baru tanpa migrasi. Panduan: [VPS](docs/VPS.md), [DNS sendiri](docs/DNS.md), dan [fitur workspace](docs/WORKSPACE.md).
 
 ## Pembayaran Tripay
 
@@ -90,13 +93,13 @@ Jika gateway timeout, invoice masuk `review`. Aplikasi tidak membuat transaksi k
 
 Pengujian memakai database sementara. Suite mencakup callback sah/palsu/berulang, jumlah invoice, urutan status, double charge, timeout, panel offline, provisioning demo, symlink/path traversal, CSRF, isolasi pelanggan, SSO, kupon, dan tiket. HTTP Tripay dimock; suite tidak membuktikan akses merchant sungguhan.
 
-Opsional, setelah `tools/dev.py` berjalan, jalankan `tests/browser_smoke.py` menggunakan Python dengan Playwright dan Chromium tersedia. Pengujian membuat akun/pesanan demo lokal, memeriksa desktop/mobile, checkout, tiket, provisioning API, edit file, dan SSO. Screenshot disimpan di `var/screenshots/`.
+Opsional, setelah `tools/dev.py` berjalan, jalankan `tests/browser_smoke.py` menggunakan Python dengan Playwright dan Chromium tersedia. Pengujian membuat akun/pesanan demo lokal, memeriksa desktop/mobile, checkout, tiket, provisioning API, edit file, dan SSO. Screenshot disimpan di `var/screenshots/`. `tests/browser_features.py` memeriksa editor/folder, DNS CRUD, antrean database, keamanan, SSL/statistik, notifikasi, dan profil. Tes `tests/test_live_services.py` bersifat opt-in dengan `MIKA_TEST_MYSQL_SOCKET` (socket SQL sementara, jangan produksi) dan `MIKA_TEST_BIND_ROOT` (root ekstraksi binari BIND). Tanpa variabel tersebut, dua tes layanan nyata dilaporkan skipped.
 
 ## Batas versi ini
 
 - Hosting yang tersedia adalah statis/PHP, bukan penjualan VPS, reseller, game server, atau container terisolasi.
-- Belum ada DNS authoritative, registrasi domain, email hosting, FTP/SFTP pelanggan, ataupun manajemen MySQL/PostgreSQL.
-- File manager/backup web menangani file utama. Backup penuh/subdirektori/database dioperasikan admin.
+- DNS authoritative BIND9 dan database MariaDB tersedia. Belum ada registrasi domain, email hosting, FTP/SFTP pelanggan, PostgreSQL, phpMyAdmin, atau replikasi DNS secondary otomatis.
+- File manager/backup web mendukung subfolder dengan batas ukuran. Backup seluruh server dan database SQL dioperasikan admin.
 - Batas paket adalah batas upload panel dan pengaturan proses/memory PHP. Kuota disk OS, CPU, bandwidth, dan isolasi kernel perlu disiapkan terpisah.
 - Perpanjangan, perubahan paket, refund, dan penghapusan akun dilakukan admin; belum ada invoice renewal otomatis. Admin dapat memperpanjang `expires_at` lalu resume akun.
 - Akun Linux terpisah dan `open_basedir` PHP bukan pengganti isolasi tenant. Hosting PHP menerima kode pelanggan: lakukan hardening dan pengujian keamanan sebelum menerima pengguna yang tidak dipercaya.

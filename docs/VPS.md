@@ -5,12 +5,12 @@
 VPS Ubuntu 24.04 baru, disarankan minimal 2 vCPU, RAM 2 GB, disk 20 GB untuk pengujian. Kebutuhan produksi bergantung pada website yang dihosting. Installer khusus IPv4. Domain panel dan toko harus berbeda dan bukan domain pelanggan yang akan diprovisioning.
 
 1. Arahkan A record domain panel dan toko ke IP publik VPS.
-2. Buka port 80/443 pada firewall dan security group provider. Pertahankan SSH yang Anda gunakan. Installer tidak mengubah firewall.
+2. Buka port 80/443 serta TCP/UDP 53 pada firewall dan security group provider. Pertahankan SSH yang Anda gunakan. Installer tidak mengubah firewall.
 3. Unggah/clone proyek, buat venv, lalu install `requirements.lock` dengan `--require-hashes` seperti README. Jika `venv` belum tersedia, pasang `python3.12-venv` melalui apt.
 4. Periksa rencana: `.venv/bin/python tools/install_vps.py --plan-only`.
 5. Jalankan `sudo .venv/bin/python tools/install_vps.py`. Tinjau ringkasan dan konfirmasi instalasi.
 
-Gunakan server pengujian terlebih dahulu. Installer menginstal Nginx, PHP 8.3 FPM/CLI, Python venv, Certbot, dan CA certificates. Ia tidak menghapus aplikasi atau konfigurasi yang sudah ada; bentrok instalasi menyebabkan proses berhenti.
+Gunakan server pengujian terlebih dahulu. Installer menginstal Nginx, PHP 8.3 FPM/CLI/MySQL, MariaDB, BIND9, Python venv, Certbot, dan CA certificates. Ia tidak menghapus aplikasi atau konfigurasi yang sudah ada; bentrok instalasi menyebabkan proses berhenti.
 
 Password admin dibuat baru untuk panel/toko, minimal 12 karakter, bukan hanya angka, dan bukan password umum. Saat diketik, karakter tidak ditampilkan. Jika password ditolak atau konfirmasi berbeda, installer menjelaskan alasannya dan meminta ulang pada tahap password, sebelum memasang komponen sistem.
 
@@ -28,10 +28,12 @@ Password admin dibuat baru untuk panel/toko, minimal 12 karakter, bukan hanya an
 | `mychahost.service` | Gunicorn toko, user mika, loopback 8002 |
 | `mika-provision.service` | Worker root untuk akun Linux/Nginx/PHP/Certbot |
 | `mycha-orders.service` | Worker toko, user mika, retry pesanan berbayar |
+| `named.service` | DNS authoritative BIND9, zone /etc/bind/mika-zones |
+| `mariadb.service` | Database pelanggan dengan socket lokal |
 
 Setiap situs memperoleh user Linux `mh` + ID internal, shell `nologin`, vhost Nginx, dan pool PHP terpisah jika engine PHP. Worker memakai argumen subprocess, bukan shell dari input pelanggan. Hosting dibatasi satu domain utama dan alias `www` per akun.
 
-Situs pelanggan awalnya HTTP. Setelah A record domain utama dan alias `www` siap, administrator membuka detail akun pada MikaPanels dan memilih **Pasang SSL**. Worker memakai Certbot webroot, menguji Nginx, lalu reload. Tombol ini tidak tersedia di demo. Konfigurasi suspend/resume mempertahankan referensi sertifikat yang sudah ada. Certbot timer OS memperbarui sertifikat, dengan deploy hook untuk reload Nginx.
+Situs pelanggan awalnya HTTP. Setelah A record domain utama dan alias `www` siap, pemilik membuka tab SSL pada MikaPanels dan memilih **Ajukan SSL**. Worker memakai Certbot webroot, menguji Nginx, lalu reload. Tombol ini tidak tersedia di demo. Konfigurasi suspend/resume mempertahankan referensi sertifikat yang sudah ada. Certbot timer OS memperbarui sertifikat, dengan deploy hook untuk reload Nginx.
 
 ## Membuat hosting tanpa pembayaran
 
@@ -41,7 +43,7 @@ Pembuatan manual menghasilkan akun queued, satu job create, serta audit `hosting
 
 Untuk contoh domain `test.mychahost.my.id`, buat A record `test` ke `172.236.9.185`; jika akan memasang SSL, buat CNAME `www.test` ke `test.mychahost.my.id`. Setelah provisioning dan DNS siap, website awal dapat diuji melalui HTTP, kemudian pasang SSL melalui tindakan admin.
 
-## Pembaruan fitur hosting manual
+## Pembaruan desain dan fitur workspace
 
 Jika source lama berasal dari ZIP atau folder instalasi tidak memiliki `.git`, ambil source terbaru melalui clone baru. Jalankan di VPS:
 
@@ -50,20 +52,26 @@ bash <<'MIKA_UPDATE'
 set -eu
 mika_update_dir=$(mktemp -d /tmp/mikapanels-update.XXXXXX)
 git clone --depth 1 --branch main https://github.com/danuwindha-del/MikaPanel.git "$mika_update_dir/source"
-sudo bash "$mika_update_dir/source/tools/update_manual_hosting.sh"
+sudo python3 "$mika_update_dir/source/tools/update_vps.py"
 MIKA_UPDATE
 ```
 
-Helper memeriksa source, menyimpan cadangan kode di `/var/backups/mikapanels-manual.…`, menyalin delapan file kode/template/CSS, collectstatic, restart `mikapanels`, dan memeriksa health HTTPS. Pembaruan tidak memerlukan migrasi database dan tidak menimpa konfigurasi/kredensial. Worker provisioning yang sudah berjalan tetap digunakan. Jika health gagal, kode sudah tersalin; gunakan lokasi backup yang dicetak dan periksa log sebelum melakukan rollback. `--plan-only` memeriksa rencana, bukan pengujian instalasi VPS nyata.
+Helper menyimpan backup privat kode, konfigurasi, database SQLite konsisten, dan venv lama ke `/var/backups/mikapanels-…` (direktori 0700). Ia menyiapkan dependensi baru dengan SHA256 lock sebelum menghentikan layanan, kemudian memperbarui kode, menjalankan migrasi kedua service, collectstatic, konfigurasi BIND9/MariaDB, dan health HTTPS. File website, konfigurasi Tripay, password admin, serta secret key lama dipertahankan. Hosting lama mendapat job refresh/DNS. Pembaruan memerlukan downtime singkat; jangan menjalankan dua updater sekaligus.
+
+`python3 tools/update_vps.py --plan-only` hanya menampilkan operasi. Root updater hanya mendukung Ubuntu 24.04 dan instalasi `/opt/mikapanels` yang dibuat installer. Ia menolak konfigurasi BIND khusus yang belum diintegrasikan; tidak mengambil alih zone DNS lain. Script `update_manual_hosting.sh` merupakan alias updater lengkap.
+
+Sesudah pembaruan, ikuti [DNS](DNS.md) untuk A/glue `ns1`/`ns2`, port 53, dan delegasi domain pelanggan. Profil, statistik, file manager baru, database, SSL, serta keamanan dijelaskan di [Workspace](WORKSPACE.md). Migrasi juga diperlukan untuk halaman notifikasi MychaHost.
 
 ## Pemeriksaan
 
 ```bash
-sudo systemctl status mikapanels mychahost mika-provision mycha-orders
+sudo systemctl status mikapanels mychahost mika-provision mycha-orders named mariadb
 sudo journalctl -u mikapanels -u mychahost -n 80 --no-pager
 sudo journalctl -u mika-provision -u mycha-orders -n 80 --no-pager
 sudo nginx -t
 sudo php-fpm8.3 -t
+sudo named-checkconf
+sudo rndc status
 ```
 
 Periksa `/health/` kedua domain melalui HTTPS, login admin, buat akun pelanggan, dan uji sandbox Tripay. Konfigurasi secure cookie dan HTTPS aktif saat `MIKA_DEBUG=0`. Jangan bind Gunicorn ke publik atau menerima `X-Forwarded-Proto` dari proxy selain Nginx yang dikelola.
@@ -89,9 +97,9 @@ Worker menandai pekerjaan gagal dan menyimpan kelas error. Perbaiki prasyarat, l
 
 ## Backup dan upgrade
 
-Backup harus mencakup kedua database, `/etc/mikapanels`, `/srv/mika-hosting`, konfigurasi Nginx/PHP, dan `/etc/letsencrypt`. Gunakan SQLite backup API atau hentikan semua penulis database untuk snapshot konsisten; jangan menyalin DB hidup beserta journal yang tidak konsisten. Enkripsi backup yang mengandung konfigurasi rahasia, simpan di luar VPS, dan uji restore.
+Backup harus mencakup kedua database, `/etc/mikapanels`, `/srv/mika-hosting`, konfigurasi Nginx/PHP/BIND, `/etc/letsencrypt`, dan dump SQL database pelanggan MariaDB. Gunakan SQLite backup API atau hentikan semua penulis database untuk snapshot konsisten; jangan menyalin DB hidup beserta journal yang tidak konsisten. Enkripsi backup yang mengandung konfigurasi rahasia, simpan di luar VPS, dan uji restore.
 
-Untuk upgrade, backup terlebih dahulu, hentikan empat layanan, perbarui kode root-owned tanpa menimpa konfigurasi/data, install lock baru dengan hash, jalankan migrasi kedua service, collectstatic, pulihkan ownership database, lalu mulai layanan dan verifikasi kesehatan serta alur aplikasi. Installer fresh-install tidak menjadi perintah upgrade.
+Untuk upgrade, backup terlebih dahulu, hentikan empat layanan, perbarui kode root-owned tanpa menimpa konfigurasi/data, install lock baru dengan hash, jalankan migrasi kedua service, collectstatic, pulihkan ownership database, lalu mulai layanan dan verifikasi kesehatan serta alur aplikasi. Gunakan helper upgrade di atas; installer fresh-install tidak menjadi perintah upgrade. Jika upgrade berhenti, periksa backup dan keluaran terakhir. Jangan langsung menjalankan installer atau menghapus `.venv-update` tanpa pemeriksaan. Rollback migrasi memerlukan pasangan kode/SQLite/environment dari backup yang sama; menghentikan semua penulis sebelum restore mencegah data rusak. Venv lama harus dikembalikan ke `/opt/mikapanels/.venv` agar shebang sesuai.
 
 ## Sebelum menerima pelanggan produksi
 

@@ -1,5 +1,6 @@
 import requests
 from django.conf import settings
+from django.db import transaction
 from .models import Order
 
 
@@ -35,7 +36,17 @@ def fulfill(order):
         fields = {"panel_account_id": data["id"], "panel_status": data["status"], "provisioning_error": ""}
         if data["status"] == "active":
             fields["status"] = "active"
-        Order.objects.filter(pk=order.pk, status__in=["paid", "active"]).update(**fields)
+        with transaction.atomic():
+            if fields.get("status") == "active":
+                newly_active = Order.objects.filter(pk=order.pk, status="paid").update(**fields)
+                if newly_active:
+                    from common.models import Notification
+                    Notification.objects.create(user=order.user, title="Hosting Anda sudah aktif",
+                        body=f"{order.domain} siap dikelola melalui MikaPanels.", link=f"/orders/{order.pk}/")
+                else:
+                    Order.objects.filter(pk=order.pk, status="active").update(**fields)
+            else:
+                Order.objects.filter(pk=order.pk, status__in=["paid", "active"]).update(**fields)
     except (PanelError, KeyError, TypeError):
         Order.objects.filter(pk=order.pk).update(provisioning_error="PanelUnavailable")
         raise PanelError("PanelUnavailable")

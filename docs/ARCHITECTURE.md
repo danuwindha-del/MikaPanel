@@ -13,10 +13,12 @@ flowchart LR
     Panel --> PanelDB[(Panel SQLite)]
     PanelDB --> Provision[Worker provisioning]
     Provision --> Nginx[Nginx + Linux users + PHP-FPM]
+    Provision --> DNS[BIND9 authoritative]
+    Provision --> SQL[MariaDB schemas + users]
     Shop -->|Tiket login sekali pakai| Panel
 ```
 
-Satu checkout kode, dua proses dengan `MIKA_SERVICE=panel|shop`. URL, database, secret key, cookie sesi/CSRF, dan admin model dibatasi sesuai service. Logika server dan installer semuanya Python. Frontend merupakan template server-rendered, CSS lokal, dan JavaScript kecil untuk konfirmasi tindakan; tidak ada bundler atau CDN yang wajib.
+Satu checkout kode, dua proses dengan `MIKA_SERVICE=panel|shop`. URL, database, secret key, cookie sesi/CSRF, dan admin model dibatasi sesuai service. Logika server dan installer semuanya Python. Frontend merupakan template server-rendered, CSS lokal, dan JavaScript lokal untuk dialog, navigasi ponsel, pencarian, dan editor sintaks; tidak ada bundler atau CDN yang wajib.
 
 Root worker terpisah dari Gunicorn yang berjalan sebagai user `mika`. Kode installer/root worker dimiliki root di produksi. Token API adalah credential server-to-server, tidak pernah dimasukkan pada template pelanggan. Demo tidak membuat sistem user atau Nginx/PHP pool.
 
@@ -63,8 +65,16 @@ Domain pada order disimpan unik termasuk riwayat gagal untuk menghindari bentrok
 
 Django menyediakan password hashing, validasi password, CSRF pada form, escaping template, secure cookie produksi, dan perlindungan clickjacking. Login dibatasi per username setelah 10 kegagalan dalam 15 menit. Callback gateway dan SSO adalah pengecualian CSRF terarah, digantikan signature raw-body atau token sekali pakai + validasi Origin.
 
-File manager hanya menangani file reguler pada root public. Operasi menggunakan directory descriptor dan `O_NOFOLLOW`, memblokir traversal, symlink, serta file khusus. Upload maksimal 10 MB; backup root maksimal 50 MB. Pengukuran storage bersifat batas upload aplikasi, bukan hard quota filesystem.
+File manager menangani folder bertingkat dan file reguler di bawah public. Operasi menggunakan directory descriptor dan `O_NOFOLLOW`, memblokir traversal, symlink, hardlink file, serta file khusus. Upload maksimal 10 MB; backup website/subfolder maksimal 50 MB. Pengukuran storage bersifat batas upload aplikasi, bukan hard quota filesystem.
 
-PHP berjalan sebagai user per situs dengan pool terpisah, memory limit, jumlah proses, temporary directory, `open_basedir`, dan sejumlah fungsi eksekusi dinonaktifkan. Ini tidak mengisolasi kernel/network dan tidak memberi jaminan sandbox terhadap pelanggan berbahaya. Gunakan isolasi tambahan sebelum menawarkan hosting umum. Belum ada MFA, password reset email, resource accounting OS, penghapusan tenant otomatis, atau pengelolaan database pelanggan.
+PHP berjalan sebagai user per situs dengan pool terpisah, memory limit, jumlah proses, temporary directory, `open_basedir`, dan sejumlah fungsi eksekusi dinonaktifkan. Ini tidak mengisolasi kernel/network dan tidak memberi jaminan sandbox terhadap pelanggan berbahaya. Gunakan isolasi tambahan sebelum menawarkan hosting umum. Belum ada MFA, password reset email, resource accounting OS, penghapusan tenant otomatis, atau replikasi database multi-server.
 
 Koneksi Tripay memakai TLS terverifikasi; dependency lock mencantumkan hash SHA-256 dari PyPI. Konfigurasi privat tidak boleh masuk Git. Perubahan jaringan cloud tersimpan sebagai draft dan bukan publikasi lingkungan.
+
+## DNS, database, dan telemetry
+
+DNSRecord menyimpan record tervalidasi; SOA serial bertambah saat perubahan diantrekan. TXT di-escape per byte UTF-8 agar tidak menjadi directive zone. DNS worker tunggal menulis file root-owned, memvalidasi BIND, membangun include, dan reload; kegagalan memulihkan file sebelumnya. Publikasi lokal tidak membuktikan delegasi publik.
+
+ManagedDatabase memiliki schema dan user dari UUID server-side, password Fernet dengan key turunan SECRET_KEY panel, serta lifecycle pending/active/deleting/deleted/failed. Web hanya menyimpan permintaan; root worker mengoperasikan socket MariaDB. GRANT men-escape underscore agar nama schema bukan pola wildcard. Batas slot diclaim melalui update bersyarat dalam transaksi dan penghapusan idempotent mengembalikan slot sekali.
+
+Worker mengukur /proc dan filesystem sekitar 30 detik sekali; log Nginx situs memakai timestamp/status/body-byte tanpa URL/header/kredensial. Offset dan inode menghindari penghitungan ulang setelah pembacaan/rotasi. MetricSample/UsageSample disimpan dua hari. CPU server dan jaringan bukan accounting CPU/kuota per tenant. Notifikasi dan aktivitas pengaturan mengikuti akses pemilik dan CSRF form biasa.

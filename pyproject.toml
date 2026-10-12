@@ -1,11 +1,12 @@
 [project]
 name = "mikapanels"
-version = "0.1.0"
+version = "0.2.0"
 description = "MikaPanels hosting control panel and MychaHost storefront"
 requires-python = ">=3.12"
 dependencies = [
   "Django>=5.2,<5.3", "gunicorn>=23,<24", "requests>=2.32.4,<3",
   "rich>=14,<15", "whitenoise>=6.9,<7",
+  "cryptography>=46,<47", "PyMySQL>=1.1.2,<2",
 ]
 
 [project.optional-dependencies]

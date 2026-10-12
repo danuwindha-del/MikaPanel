@@ -110,9 +110,9 @@ def main():
     parser = argparse.ArgumentParser(description="MikaPanels guided VPS installer")
     parser.add_argument("--plan-only", action="store_true", help="Show supported platform and operations without modifying system")
     options = parser.parse_args()
-    console.print(Panel("[bold cyan]MikaPanels[/bold cyan] × [bold magenta]MychaHost[/bold magenta]\nInstaller VPS Ubuntu 24.04 · Nginx · PHP-FPM · Python", border_style="cyan"))
+    console.print(Panel("[bold cyan]MikaPanels[/bold cyan] × [bold magenta]MychaHost[/bold magenta]\nInstaller VPS Ubuntu 24.04 · Nginx · PHP-FPM · MariaDB · BIND9 · Python", border_style="cyan"))
     if options.plan_only:
-        console.print("Pada VPS Ubuntu 24.04 baru: memasang dependensi OS, menyalin aplikasi ke /opt/mikapanels, membuat user mika, dua database, empat layanan systemd, proxy Nginx, dan sertifikat TLS via Certbot. Konfigurasi Tripay dimasukkan melalui prompt tersembunyi. Konfigurasi yang sudah ada tidak ditimpa.")
+        console.print("Pada VPS Ubuntu 24.04 baru: memasang dependensi OS, menyalin aplikasi ke /opt/mikapanels, membuat user mika, dua database, empat layanan systemd, proxy Nginx, MariaDB, DNS authoritative BIND9, dan sertifikat TLS via Certbot. Konfigurasi Tripay dimasukkan melalui prompt tersembunyi. Konfigurasi yang sudah ada tidak ditimpa.")
         return
     if os.geteuid() != 0:
         raise SystemExit("Jalankan dengan sudo menggunakan Python .venv proyek.")
@@ -134,6 +134,12 @@ def main():
     email = Prompt.ask("Email admin dan Let's Encrypt")
     if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
         raise SystemExit("Email tidak valid")
+    dns_primary = validate_domain(Prompt.ask("Nameserver utama", default="ns1." + shop_domain))
+    dns_secondary = validate_domain(Prompt.ask("Nameserver kedua", default="ns2." + shop_domain))
+    if dns_primary == dns_secondary:
+        raise SystemExit("Nama kedua nameserver harus berbeda")
+    from system_services import dns_preflight, configure_services
+    dns_preflight()
     password = prompt_admin_password()
     mode = Prompt.ask("Mode Tripay", choices=["sandbox", "production"], default="sandbox")
     merchant = Prompt.ask("Kode merchant Tripay (boleh kosong)", default="")
@@ -148,11 +154,11 @@ def main():
     for name, value in [("Panel", panel_domain), ("Toko", shop_domain), ("Server", server_ip), ("Tripay", mode), ("Data", str(DATA))]:
         table.add_row(name, value)
     console.print(table)
-    console.print("DNS kedua domain harus sudah mengarah ke IP VPS. Port 80/443 harus dibuka di firewall VPS/provider. Installer tidak mengubah firewall.")
+    console.print("DNS kedua domain harus sudah mengarah ke IP VPS. Port 80/443 dan TCP/UDP 53 harus dibuka di firewall VPS/provider. Installer tidak mengubah firewall.")
     if not Confirm.ask("Jalankan instalasi dan penerbitan TLS sekarang?", default=False):
         return
     run(["apt-get", "update"])
-    run(["apt-get", "install", "-y", "python3.12-venv", "nginx", "php8.3-fpm", "php8.3-cli", "certbot", "python3-certbot-nginx", "ca-certificates"])
+    run(["apt-get", "install", "-y", "python3.12-venv", "nginx", "php8.3-fpm", "php8.3-cli", "php8.3-mysql", "mariadb-server", "bind9", "bind9-utils", "certbot", "python3-certbot-nginx", "ca-certificates"])
     import pwd
     try:
         pwd.getpwnam("mika")
@@ -177,7 +183,8 @@ def main():
     token = secrets.token_urlsafe(48)
     common = {"MIKA_DEBUG": "0", "MIKA_API_TOKEN": token, "MIKA_PROVISION_MODE": "system", "MIKA_HOSTING_ROOT": str(sites),
               "MIKA_PANEL_URL": f"https://{panel_domain}", "MYCHA_PUBLIC_URL": f"https://{shop_domain}", "MIKA_SERVER_IP": server_ip,
-              "MIKA_CERTBOT_EMAIL": email}
+              "MIKA_CERTBOT_EMAIL": email, "MIKA_DNS_ENABLED": "1", "MIKA_MYSQL_ENABLED": "1",
+              "MIKA_DNS_PRIMARY": dns_primary, "MIKA_DNS_SECONDARY": dns_secondary}
     for service, domain in [("panel", panel_domain), ("shop", shop_domain)]:
         directory = DATA / service
         directory.mkdir(mode=0o2770)
@@ -216,9 +223,10 @@ def main():
     }}
 }}
 """)
+    configure_services()
     run(["nginx", "-t"])
     run(["systemctl", "daemon-reload"])
-    run(["systemctl", "enable", "--now", "nginx", "php8.3-fpm", "mikapanels", "mychahost", "mika-provision", "mycha-orders"])
+    run(["systemctl", "enable", "--now", "nginx", "php8.3-fpm", "named", "mariadb", "mikapanels", "mychahost", "mika-provision", "mycha-orders"])
     run(["systemctl", "reload", "nginx"])
     run(["certbot", "--nginx", "--non-interactive", "--agree-tos", "--redirect", "-m", email, "-d", panel_domain, "-d", shop_domain])
     hook = Path("/etc/letsencrypt/renewal-hooks/deploy/mikapanels-nginx")
@@ -230,7 +238,7 @@ def main():
         response.raise_for_status()
         if response.json().get("status") != "ok":
             raise SystemExit("Readiness check failed")
-    console.print(Panel(f"Panel: https://{panel_domain}\nToko: https://{shop_domain}\nUsername: admin\nCallback Tripay: https://{shop_domain}/payments/tripay/callback/\nKonfigurasi: {CONFIG}\nPengaturan kuota filesystem, backup lengkap, SMTP, dan isolasi tenant perlu diselesaikan sebelum produksi publik.", title="Instalasi selesai", border_style="green"))
+    console.print(Panel(f"Panel: https://{panel_domain}\nToko: https://{shop_domain}\nUsername: admin\nCallback Tripay: https://{shop_domain}/payments/tripay/callback/\nKonfigurasi: {CONFIG}\nDNS: {dns_primary}, {dns_secondary} (pasang A/glue dan delegasi sesuai docs/DNS.md)\nPengaturan kuota filesystem, backup lengkap, SMTP, dan isolasi tenant perlu diselesaikan sebelum produksi publik.", title="Instalasi selesai", border_style="green"))
 
 
 if __name__ == "__main__":

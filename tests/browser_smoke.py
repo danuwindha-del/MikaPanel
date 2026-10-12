@@ -34,7 +34,7 @@ with sync_playwright() as playwright:
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     assert page.goto("http://127.0.0.1:8002/").status == 200
-    page.get_by_role("heading", name="Hosting untuk ide yang lebih besar.").wait_for()
+    page.get_by_role("heading", name="Layanan hosting premium untuk bisnis Anda.").wait_for()
     assert page.locator(".pricing-card").count() == 3
     no_overflow(page)
     page.screenshot(path=str(screens / "mychahost-desktop.png"), full_page=True)
@@ -77,15 +77,16 @@ with sync_playwright() as playwright:
     page.locator('[name="password"]').fill(admin["password"])
     page.get_by_role("button", name="Masuk ke dashboard").click()
     page.wait_for_url("**/dashboard/")
-    page.get_by_role("heading", name="Semua website. Satu kendali.").wait_for()
+    page.get_by_role("heading", name="Panel Hosting").wait_for()
     page.screenshot(path=str(screens / "mikapanels-dashboard.png"), full_page=True)
     page.goto(f"http://127.0.0.1:8001/accounts/{hosting['id']}/")
-    page.locator('[name="filename"]').fill("demo.html")
-    page.locator('[name="content"]').fill("<h1>MikaPanels browser smoke</h1>")
-    page.get_by_role("button", name="Simpan file").click()
-    page.get_by_text("demo.html", exact=True).wait_for()
+    page.get_by_role("button", name="File baru").click()
+    page.locator('#new-file-dialog [name="filename"]').fill("demo.html")
+    page.locator('#new-file-dialog [name="content"]').fill("<h1>MikaPanels browser smoke</h1>")
+    page.get_by_role("button", name="Simpan file →").click()
+    page.locator('tr[data-file-name="demo.html"]').wait_for()
     page.goto(f"http://127.0.0.1:8001/accounts/{hosting['id']}/?file=demo.html")
-    assert page.locator('[name="content"]').input_value() == "<h1>MikaPanels browser smoke</h1>"
+    assert page.locator('#edit-file-dialog [name="content"]').input_value() == "<h1>MikaPanels browser smoke</h1>"
     page.screenshot(path=str(screens / "mikapanels-files.png"), full_page=True)
     token = api("/api/v1/accounts/browser-demo-site/sso/", {})["token"]
     customer = browser.new_context(viewport={"width": 1440, "height": 1000})

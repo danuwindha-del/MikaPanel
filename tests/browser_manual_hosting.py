@@ -42,10 +42,11 @@ with sync_playwright() as playwright:
         page.reload()
     assert page.locator(".badge").inner_text() == "Aktif"
     page.get_by_role("heading", name="File manager", exact=True).wait_for()
-    page.locator('[name="filename"]').fill("manual.html")
-    page.locator('[name="content"]').fill("<h1>Manual hosting works</h1>")
-    page.get_by_role("button", name="Simpan file").click()
-    page.get_by_text("manual.html", exact=True).wait_for()
+    page.get_by_role("button", name="File baru").click()
+    page.locator('#new-file-dialog [name="filename"]').fill("manual.html")
+    page.locator('#new-file-dialog [name="content"]').fill("<h1>Manual hosting works</h1>")
+    page.get_by_role("button", name="Simpan file →").click()
+    page.locator('tr[data-file-name="manual.html"]').wait_for()
     page.screenshot(path=str(screens / "mikapanels-manual-active.png"), full_page=True)
     page.goto("http://127.0.0.1:8001/admin/hosting/account/add/")
     assert page.locator('[name="days"]').count() == 1

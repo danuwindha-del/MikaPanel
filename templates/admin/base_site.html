@@ -1,0 +1,4 @@
+{% extends 'admin/base.html' %}
+{% block title %}{{ title }} · {{ brand }}{% endblock %}
+{% block branding %}<div id="site-name"><a href="{% url 'admin:index' %}">M ◈ {{ brand }} · Administrasi</a></div>{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>:root,html[data-theme="light"]{--primary:#cba350;--secondary:#101a32;--accent:#f3d894;--header-color:#f3d894;--header-branding-color:#f3d894;--link-fg:#917023;--link-selected-fg:#69521c;--button-bg:#101a32;--button-hover-bg:#263754;--default-button-bg:#b58d3b;--default-button-hover-bg:#92712f}#header{background:#101a32}#branding #site-name a{color:#f3d894}html[data-theme="dark"]{--primary:#cba350;--secondary:#101a32;--header-bg:#101a32;--header-color:#f3d894;--header-branding-color:#f3d894;--link-fg:#dfbd73;--button-bg:#263754;--default-button-bg:#92712f}</style>{% endblock %}

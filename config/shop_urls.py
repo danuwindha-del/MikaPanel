@@ -7,6 +7,7 @@ urlpatterns = [
     path("", views.home), path("health/", common.health), path("login/", common.signin),
     path("register/", common.register), path("logout/", common.signout), path("admin/", admin.site.urls),
     path("dashboard/", views.dashboard), path("terms/", views.terms),
+    path("notifications/", common.notifications), path("profile/", common.profile),
     path("checkout/<slug:slug>/", views.checkout, name="checkout"),
     path("orders/<uuid:pk>/", views.order_detail, name="order_detail"),
     path("orders/<uuid:pk>/pay/", views.pay, name="pay"),

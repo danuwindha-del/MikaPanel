@@ -12,4 +12,5 @@ for mika_service in panel shop; do
     /workspace/.venvs/mikapanels/bin/python tools/run.py "$mika_service" collectstatic --noinput
     /workspace/.venvs/mikapanels/bin/python tools/run.py "$mika_service" check
 done
+/workspace/.venvs/mikapanels/bin/python tools/run.py panel initialize_features
 /workspace/.venvs/mikapanels/bin/python tools/test.py -q

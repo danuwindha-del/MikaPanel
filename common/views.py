@@ -15,6 +15,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from .forms import RegisterForm, TicketForm
 from .models import AuditEvent, LoginAttempt, Ticket, TicketReply
+from .models import Notification
 
 
 def health(request):
@@ -100,3 +101,35 @@ def ticket_detail(request, pk):
                 ticket.save(update_fields=["status"])
         return redirect("ticket_detail", pk=pk)
     return render(request, "ticket.html", {"ticket": ticket})
+
+
+@login_required
+def notifications(request):
+    if request.method == "POST":
+        request.user.notifications.filter(is_read=False).update(is_read=True)
+        return redirect("/notifications/")
+    return render(request, "notifications.html", {"notifications": request.user.notifications.all()[:100]})
+
+
+@login_required
+def profile(request):
+    from django import forms
+    from django.contrib.auth.forms import PasswordChangeForm
+    from django.contrib.auth import update_session_auth_hash
+    class ProfileForm(forms.Form):
+        first_name = forms.CharField(max_length=150, label="Nama tampilan")
+    form = ProfileForm(request.POST if request.POST.get("action") == "profile" else None,
+                       initial={"first_name": request.user.first_name or request.user.username})
+    password_form = PasswordChangeForm(request.user, data=request.POST if request.POST.get("action") == "password" else None)
+    if request.method == "POST":
+        if request.POST.get("action") == "profile" and form.is_valid():
+            request.user.first_name = form.cleaned_data["first_name"]
+            request.user.save(update_fields=["first_name"])
+            messages.success(request, "Profil diperbarui.")
+            return redirect("/profile/")
+        elif request.POST.get("action") == "password" and password_form.is_valid():
+            user = password_form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, "Password diperbarui.")
+            return redirect("/profile/")
+    return render(request, "profile.html", {"form": form, "password_form": password_form})

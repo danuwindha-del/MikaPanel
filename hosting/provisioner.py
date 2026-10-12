@@ -3,6 +3,7 @@ import html
 import os
 import re
 import subprocess
+import ipaddress
 from pathlib import Path
 
 from django.conf import settings
@@ -50,6 +51,10 @@ def nginx_config(account, suspended=False):
     ssl_certificate_key {cert}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
 """
+    rules = "\n".join(f"    deny {ipaddress.ip_network(rule.network, strict=False)};" for rule in account.blocked_ips.all())
+    headers = '    add_header X-Content-Type-Options "nosniff" always;\n    add_header X-Frame-Options "SAMEORIGIN" always;' if account.security_headers else ""
+    redirect_https = '    if ($scheme = http) { return 301 https://$host$request_uri; }' if tls and account.force_https else ""
+    fallback = "/index.php?$args" if account.kind == "php" else "=404"
     return f"""server {{
     listen 80;
 {tls}
@@ -57,8 +62,14 @@ def nginx_config(account, suspended=False):
     root {root};
     index index.php index.html;
     client_max_body_size 10m;
+    access_log {settings.MIKA_NGINX_LOG_DIR}/mika-site-{user}.access.log mika;
+    autoindex {'on' if account.directory_listing else 'off'};
+    disable_symlinks on from=$document_root;
+{headers}
+{rules}
+{redirect_https}
     {'return 503;' if suspended else ''}
-    location / {{ try_files $uri $uri/ =404; }}
+    location / {{ try_files $uri $uri/ {fallback}; }}
     location ^~ /.well-known/acme-challenge/ {{ allow all; }}
     location ~ /\\. {{ deny all; }}
 {php if php else '    location ~ \\.php$ { return 404; }'}
@@ -67,7 +78,7 @@ def nginx_config(account, suspended=False):
 
 
 def process(account, action):
-    if action not in {"create", "suspend", "resume", "ssl"}:
+    if action not in {"create", "suspend", "resume", "ssl", "refresh"}:
         raise ValueError("Unknown provisioning action")
     domain_name(account.domain)
     user = account.system_user
@@ -86,6 +97,11 @@ def process(account, action):
             raise ValueError("MIKA_CERTBOT_EMAIL is required")
         run("certbot", "certonly", "--webroot", "-w", str(root / "public"), "--non-interactive",
             "--agree-tos", "-m", settings.MIKA_CERTBOT_EMAIL, "-d", account.domain, "-d", f"www.{account.domain}")
+        refresh_ssl(account)
+        if not account.ssl_enabled:
+            raise ValueError("Certificate not found after issuance")
+        account.force_https = True
+        account.save(update_fields=["force_https"])
     if action == "create":
         if production:
             import pwd
@@ -112,9 +128,11 @@ def process(account, action):
         else:
             seed_index(index, account.domain)
     if production:
+        logging = Path("/etc/nginx/conf.d/mika-logging.conf")
+        logging.write_text("log_format mika '$msec $status $body_bytes_sent';\n")
         target = Path("/etc/nginx/conf.d") / f"mika-site-{user}.conf"
         previous = target.read_text() if target.exists() else None
-        config = nginx_config(account, suspended=action == "suspend")
+        config = nginx_config(account, suspended=action == "suspend" or (action == "refresh" and account.status == "suspended"))
         target.write_text(config)
         try:
             run("nginx", "-t")
@@ -141,7 +159,7 @@ pm.process_idle_timeout = 10s
 clear_env = yes
 security.limit_extensions = .php
 php_admin_value[memory_limit] = {account.plan.memory_mb}M
-php_admin_value[open_basedir] = {root}/public:{root}/tmp
+php_admin_value[open_basedir] = {root}/public:{root}/tmp:/run/mysqld
 php_admin_value[upload_tmp_dir] = {root}/tmp
 php_admin_value[session.save_path] = {root}/tmp
 php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,popen
@@ -149,4 +167,26 @@ php_admin_value[disable_functions] = exec,passthru,shell_exec,system,proc_open,p
             run("php-fpm8.3", "-t")
             run("systemctl", "reload", "php8.3-fpm")
         run("systemctl", "reload", "nginx")
+    if action == "create":
+        from .dns import ensure_records, publish
+        ensure_records(account)
+        if settings.MIKA_DNS_ENABLED or settings.MIKA_PROVISION_MODE == "demo":
+            publish(account)
+    if action == "refresh":
+        return account.status
     return "suspended" if action == "suspend" else "active"
+
+
+def refresh_ssl(account):
+    from cryptography import x509
+    from django.utils import timezone
+    from .models import Account
+    cert = Path("/etc/letsencrypt/live") / domain_name(account.domain) / "fullchain.pem"
+    try:
+        info = x509.load_pem_x509_certificate(cert.read_bytes())
+        expires = info.not_valid_after_utc
+        enabled = expires > timezone.now()
+    except (OSError, ValueError):
+        expires, enabled = None, False
+    Account.objects.filter(pk=account.pk).update(ssl_enabled=enabled, ssl_expires_at=expires)
+    account.ssl_enabled, account.ssl_expires_at = enabled, expires

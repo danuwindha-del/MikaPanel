@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F
 from django.utils import timezone
 from common.models import AuditEvent
-from hosting.models import Account, ProvisionJob
+from hosting.models import Account, ProvisionJob, ManagedDatabase
 from hosting.provisioner import process
 
 
@@ -29,6 +29,11 @@ class Command(BaseCommand):
             if options["recover"]:
                 ProvisionJob.objects.filter(state="running").update(state="pending")
             while True:
+                from hosting.telemetry import collect_all
+                try:
+                    collect_all()
+                except (OSError, ValueError):
+                    self.stderr.write("Telemetry not available on this platform")
                 # Expired accounts are suspended by the worker, including after downtime.
                 for account in Account.objects.filter(status="active", expires_at__lte=timezone.now()):
                     if not account.jobs.filter(state__in=["pending", "running"]).exists():
@@ -38,18 +43,36 @@ class Command(BaseCommand):
                     if not ProvisionJob.objects.filter(pk=job.pk, state="pending").update(state="running", attempts=F("attempts") + 1, updated_at=timezone.now()):
                         continue
                     try:
-                        state = process(job.account, job.action)
-                        Account.objects.filter(pk=job.account_id).update(status=state)
+                        if job.action == "dns":
+                            from hosting.dns import publish
+                            publish(job.account)
+                        elif job.action.startswith("db_"):
+                            from hosting.databases import provision
+                            database = ManagedDatabase.objects.get(pk=job.resource_id, account=job.account)
+                            provision(database, job.action)
+                        else:
+                            state = process(job.account, job.action)
+                            Account.objects.filter(pk=job.account_id).update(status=state)
                         ProvisionJob.objects.filter(pk=job.pk).update(state="done", error="", updated_at=timezone.now())
                         AuditEvent.objects.create(actor="worker", action=f"hosting.{job.action}", target=job.account.domain)
+                        from common.models import Notification
+                        Notification.objects.create(user=job.account.owner, title=f"{job.account.domain}: pekerjaan selesai",
+                            body=f"Tindakan {job.action} selesai diproses.", link=f"/accounts/{job.account_id}/")
                         self.stdout.write(f"OK {job.action}: {job.account.domain} ({settings.MIKA_PROVISION_MODE})")
                     except Exception as exc:
                         # Do not store command output or env values; log only error class.
                         ProvisionJob.objects.filter(pk=job.pk).update(state="failed", error=type(exc).__name__, updated_at=timezone.now())
                         if job.action == "create":
                             Account.objects.filter(pk=job.account_id).update(status="failed")
+                        if job.action == "dns":
+                            Account.objects.filter(pk=job.account_id).update(dns_state="failed")
+                        if job.action.startswith("db_"):
+                            ManagedDatabase.objects.filter(pk=job.resource_id, account=job.account).update(state="failed")
+                        from common.models import Notification
+                        Notification.objects.create(user=job.account.owner, title=f"{job.account.domain}: pekerjaan gagal",
+                            body=f"Tindakan {job.action} gagal ({type(exc).__name__}). Hubungi admin untuk pemeriksaan layanan.", link=f"/accounts/{job.account_id}/")
                         self.stderr.write(f"FAILED {job.account.domain}: {type(exc).__name__}")
-                        if isinstance(exc, subprocess.CalledProcessError):
+                        if isinstance(exc, subprocess.CalledProcessError) and not job.action.startswith("db_"):
                             self.stderr.write(f"Command {exc.cmd[0]} exited {exc.returncode}: {(exc.stderr or '')[-2000:]}")
                         if options["once"]:
                             raise CommandError("Provisioning failed; inspect service prerequisites") from exc

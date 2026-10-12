@@ -7,14 +7,14 @@ from .services import save_manual_account
 if settings.SERVICE == "panel":
     @admin.register(Plan)
     class PlanAdmin(admin.ModelAdmin):
-        list_display = ["name", "slug", "disk_mb", "memory_mb", "php_workers", "active"]
+        list_display = ["name", "slug", "disk_mb", "memory_mb", "php_workers", "database_limit", "active"]
 
     @admin.register(Account)
     class AccountAdmin(admin.ModelAdmin):
         list_display = ["domain", "owner", "plan", "kind", "status", "expires_at"]
         list_filter = ["status", "kind", "plan"]
         search_fields = ["domain", "external_id"]
-        readonly_fields = ["id", "external_id", "domain", "owner", "kind", "status", "created_at"]
+        readonly_fields = ["id", "external_id", "domain", "owner", "kind", "status", "created_at", "database_count", "dns_serial", "dns_initialized", "dns_state", "ssl_enabled", "ssl_expires_at"]
 
         def has_add_permission(self, request):
             return super().has_add_permission(request)
@@ -48,7 +48,7 @@ if settings.SERVICE == "panel":
     @admin.register(ProvisionJob)
     class JobAdmin(admin.ModelAdmin):
         list_display = ["account", "action", "state", "attempts", "updated_at"]
-        readonly_fields = ["account", "action", "state", "attempts", "error", "created_at", "updated_at"]
+        readonly_fields = ["account", "action", "state", "attempts", "error", "created_at", "updated_at", "resource_id"]
 
         def has_add_permission(self, request):
             return False
