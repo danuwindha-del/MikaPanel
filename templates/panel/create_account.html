@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-heading">
+  <div><div class="eyebrow">ADMIN · MANUAL HOSTING</div><h1>Buat hosting tanpa pembayaran</h1><p>Siapkan website pengujian atau layanan manual langsung dari MikaPanels.</p></div>
+  <a class="button secondary" href="/dashboard/">← Dashboard</a>
+</div>
+<div class="two-grid checkout-grid">
+  <section class="surface form-card">
+    <h2>Konfigurasi akun hosting</h2>
+    <form method="post">{% csrf_token %}{{ form.as_p }}<button class="button full">Buat &amp; antrekan hosting →</button></form>
+  </section>
+  <aside class="surface order-summary">
+    <span class="plan-icon">◈</span><h2>Khusus administrator</h2>
+    <p>Akun ini dibuat tanpa invoice dan tanpa transaksi Tripay. Pemilik akun dapat mengaksesnya di MikaPanels setelah provisioning selesai.</p>
+    <ul class="feature-list"><li>Pilih pemilik akun yang sudah ada di MikaPanels</li><li>Paket aktif dan jenis website statis/PHP</li><li>Penyiapan hosting otomatis setelah disimpan</li><li>Tindakan tercatat pada audit aktivitas</li></ul>
+    <div class="notice">Untuk tes sendiri, pilih akun admin sebagai pemilik. Status awal Dalam antrean; tunggu Aktif sebelum upload file.</div>
+    <p class="fine-print">Gunakan domain atau subdomain milik Anda. Arahkan DNS ke IP VPS. Setelah domain utama dan www siap, admin dapat memasang SSL dari detail akun.</p>
+  </aside>
+</div>
+{% endblock %}

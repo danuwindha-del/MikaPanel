@@ -33,6 +33,29 @@ Setiap situs memperoleh user Linux `mh` + ID internal, shell `nologin`, vhost Ng
 
 Situs pelanggan awalnya HTTP. Setelah A record domain utama dan alias `www` siap, administrator membuka detail akun pada MikaPanels dan memilih **Pasang SSL**. Worker memakai Certbot webroot, menguji Nginx, lalu reload. Tombol ini tidak tersedia di demo. Konfigurasi suspend/resume mempertahankan referensi sertifikat yang sudah ada. Certbot timer OS memperbarui sertifikat, dengan deploy hook untuk reload Nginx.
 
+## Membuat hosting tanpa pembayaran
+
+Admin membuka dashboard panel dan menekan **Buat hosting**, atau menggunakan halaman `/admin/hosting/account/add/`. Isi domain, pemilik akun panel, paket aktif, jenis website, dan masa aktif. Untuk pengujian sendiri pilih akun admin sebagai pemilik. Pengguna biasa dan staff tanpa izin membuat akun hosting tidak memiliki akses pembuatan.
+
+Pembuatan manual menghasilkan akun queued, satu job create, serta audit `hosting.manual.create`. Tidak ada invoice atau perubahan status pembayaran. Tunggu worker `mika-provision` menyelesaikan job dan akun berubah Aktif, lalu buka detail akun dan file manager. Domain/subdomain serta SSL tetap perlu konfigurasi DNS yang benar. Akun manual tidak muncul sebagai order MychaHost; pengelolaannya langsung melalui panel.
+
+Untuk contoh domain `test.mychahost.my.id`, buat A record `test` ke `172.236.9.185`; jika akan memasang SSL, buat CNAME `www.test` ke `test.mychahost.my.id`. Setelah provisioning dan DNS siap, website awal dapat diuji melalui HTTP, kemudian pasang SSL melalui tindakan admin.
+
+## Pembaruan fitur hosting manual
+
+Jika source lama berasal dari ZIP atau folder instalasi tidak memiliki `.git`, ambil source terbaru melalui clone baru. Jalankan di VPS:
+
+```bash
+bash <<'MIKA_UPDATE'
+set -eu
+mika_update_dir=$(mktemp -d /tmp/mikapanels-update.XXXXXX)
+git clone --depth 1 --branch main https://github.com/danuwindha-del/MikaPanel.git "$mika_update_dir/source"
+sudo bash "$mika_update_dir/source/tools/update_manual_hosting.sh"
+MIKA_UPDATE
+```
+
+Helper memeriksa source, menyimpan cadangan kode di `/var/backups/mikapanels-manual.…`, menyalin delapan file kode/template/CSS, collectstatic, restart `mikapanels`, dan memeriksa health HTTPS. Pembaruan tidak memerlukan migrasi database dan tidak menimpa konfigurasi/kredensial. Worker provisioning yang sudah berjalan tetap digunakan. Jika health gagal, kode sudah tersalin; gunakan lokasi backup yang dicetak dan periksa log sebelum melakukan rollback. `--plan-only` memeriksa rencana, bukan pengujian instalasi VPS nyata.
+
 ## Pemeriksaan
 
 ```bash

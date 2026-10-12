@@ -6,6 +6,7 @@ from hosting import api, views
 urlpatterns = [
     path("", views.home), path("health/", common.health), path("login/", common.signin),
     path("logout/", common.signout), path("dashboard/", views.dashboard), path("admin/", admin.site.urls),
+    path("accounts/create/", views.create_account, name="create_account"),
     path("accounts/<uuid:pk>/", views.account_detail, name="account_detail"),
     path("accounts/<uuid:pk>/files/", views.file_save, name="file_save"),
     path("accounts/<uuid:pk>/backup/", views.backup, name="backup"),

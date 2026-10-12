@@ -8,6 +8,8 @@ from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.http import FileResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -16,6 +18,8 @@ from django.views.decorators.csrf import csrf_exempt
 from common.models import AuditEvent
 from . import files
 from .models import Account, LoginToken, Plan, ProvisionJob
+from .forms import ManualAccountForm
+from .services import can_create_manual_account, save_manual_account
 
 
 def owned(request):
@@ -32,7 +36,30 @@ def dashboard(request):
     return render(request, "panel/dashboard.html", {"accounts": accounts[:100], "total": accounts.count(),
         "active": accounts.filter(status="active").count(), "queued": accounts.filter(status="queued").count(),
         "plans": Plan.objects.filter(active=True), "events": AuditEvent.objects.all()[:8] if request.user.is_staff else [],
+        "can_create_hosting": can_create_manual_account(request.user),
         "jobs": ProvisionJob.objects.select_related("account").order_by("-created_at")[:8] if request.user.is_staff else []})
+
+
+@login_required
+def create_account(request):
+    if not can_create_manual_account(request.user):
+        return HttpResponseForbidden("Administrator dengan izin membuat akun hosting diperlukan.")
+    form = ManualAccountForm(request.POST or None, initial={"owner": request.user.pk})
+    if request.method == "POST" and form.is_valid():
+        try:
+            account = save_manual_account(form.save(commit=False), actor=request.user, days=form.cleaned_data["days"])
+        except IntegrityError:
+            form.add_error("domain", "Domain sudah digunakan oleh akun lain. Tidak ada pekerjaan tambahan yang dibuat.")
+        except ValidationError as exc:
+            if hasattr(exc, "message_dict"):
+                for field, errors in exc.message_dict.items():
+                    form.add_error(field if field in form.fields else None, errors)
+            else:
+                form.add_error(None, exc)
+        else:
+            messages.success(request, "Akun hosting dibuat tanpa pembayaran dan masuk antrean provisioning. Tunggu status Aktif sebelum mengelola file.")
+            return redirect("account_detail", pk=account.pk)
+    return render(request, "panel/create_account.html", {"form": form})
 
 
 @login_required

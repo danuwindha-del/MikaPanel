@@ -10,6 +10,7 @@ Dua aplikasi Python terpisah untuk panel hosting dan toko hosting. Backend mengg
 |---|---|
 | Dashboard admin dan pelanggan | Landing page dan tiga paket hosting |
 | Akun hosting per domain dan paket | Registrasi, login, dan dashboard pelanggan |
+| Pembuatan hosting manual oleh admin tanpa pembayaran | Pemesanan pelanggan tetap melalui verifikasi pembayaran |
 | API bearer untuk provisioning idempotent | Checkout statis/PHP, 1/3/12 bulan |
 | Antrean worker dengan retry melalui panel | Harga snapshot, kupon persen, dan invoice |
 | Akun Linux dan Nginx vhost dalam mode sistem | Tripay sandbox/production, VA/QRIS sesuai merchant |
@@ -60,6 +61,16 @@ sudo .venv/bin/python tools/install_vps.py
 ```
 
 Installer interaktif meminta domain panel/toko, IP, email, password admin, mode dan kredensial Tripay, serta channel merchant. Token API dan secret key dibuat acak. Sumber aplikasi disalin ke `/opt/mikapanels`; data ada di `/var/lib/mikapanels`; konfigurasi rahasia ada di `/etc/mikapanels` dan tidak ditampilkan.
+
+## Hosting manual untuk pengujian
+
+Login sebagai admin MikaPanels, buka `/dashboard/`, lalu pilih **Buat hosting**. Alternatifnya buka `/admin/hosting/account/add/`. Isi domain/subdomain, pemilik akun MikaPanels (pilih admin untuk tes sendiri), paket aktif, jenis statis/PHP, dan masa aktif 1–366 hari. Pembuatan ini memerlukan staff dengan izin `hosting.add_account`; pelanggan biasa tidak dapat menggunakannya.
+
+Akun diberi external ID `MANUAL-…`, masuk antrean provisioning yang sama, dan dicatat dalam audit. Tidak ada invoice, transaksi Tripay, atau pesanan MychaHost yang dibuat. Tunggu status **Aktif**, lalu buka detail akun untuk upload/edit file. Dalam mode demo hanya direktori lokal yang dibuat; pada VPS mode sistem worker menyiapkan hosting nyata. Akun tetap ditangguhkan otomatis setelah masa aktifnya habis.
+
+Untuk tes dengan `test.mychahost.my.id`, buat A record `test` menuju IP VPS. Untuk SSL, siapkan alias `www.test` juga, lalu admin memilih **Pasang SSL** dari detail akun setelah DNS siap.
+
+Pada VPS yang sudah terpasang, helper `tools/update_manual_hosting.sh` memperbarui file fitur ini dari checkout source terbaru, menyimpan backup kode, collectstatic, restart panel, dan memeriksa health. Jalankan `bash tools/update_manual_hosting.sh --plan-only` untuk melihat rencana, lalu `sudo bash tools/update_manual_hosting.sh` dari source terbaru. Konfigurasi dan database tidak diubah. Panduan lengkap ada pada [VPS](docs/VPS.md).
 
 ## Pembayaran Tripay
 
