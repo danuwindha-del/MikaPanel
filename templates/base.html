@@ -1,0 +1,15 @@
+{% load static %}<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="MychaHost dan MikaPanels — platform hosting website dengan kontrol penuh.">
+<meta name="theme-color" content="#0b1020"><title>{% block title %}{{ brand }}{% endblock %} · Cloud hosting</title>
+<link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml"><link rel="stylesheet" href="{% static 'css/app.css' %}"></head>
+<body><div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+<header class="topbar"><a class="brand" href="/"><span class="brand-mark">M<span></span></span>{{ brand }}<small>{% if service == 'panel' %}CONTROL CENTER{% else %}CLOUD HOSTING{% endif %}</small></a>
+<nav aria-label="Navigasi utama">{% if service == 'shop' %}<a href="/#plans">Paket hosting</a>{% endif %}{% if request.user.is_authenticated %}<a href="/dashboard/">Dashboard</a><a href="/tickets/">Bantuan</a>{% if request.user.is_staff %}<a href="/admin/">Admin</a>{% endif %}<form method="post" action="/logout/">{% csrf_token %}<button class="nav-button">Keluar →</button></form>{% else %}<a href="/login/">Masuk</a>{% if service == 'shop' %}<a class="button small" href="/register/">Mulai sekarang →</a>{% endif %}{% endif %}</nav></header>
+{% if request.user.is_authenticated and request.path != '/' %}<div class="workspace"><aside class="sidebar"><div class="overline">WORKSPACE</div><a href="/dashboard/" class="side-link"><span>◈</span> Ringkasan</a>{% if service == 'shop' %}<a href="/#plans" class="side-link"><span>◇</span> Pesan hosting</a>{% endif %}<a href="/tickets/" class="side-link"><span>◎</span> Pusat bantuan</a>{% if request.user.is_staff %}<a href="/admin/" class="side-link"><span>⚙</span> Administrasi</a>{% endif %}<div class="sidebar-note"><span class="live-dot"></span> {% if service == 'panel' %}Mika control plane{% else %}Powered by MikaPanels{% endif %}<p>Satu ruang untuk ide Anda.</p></div><div class="user-tile"><span class="avatar">{{ request.user.username|slice:':1'|upper }}</span><div><strong>{{ request.user.first_name|default:request.user.username }}</strong><small>{% if request.user.is_staff %}Administrator{% else %}Member{% endif %}</small></div></div></aside>{% endif %}
+<main class="{% if request.user.is_authenticated and request.path != '/' %}workspace-main{% else %}public-main{% endif %}">
+{% for message in messages %}<div class="notice {{ message.tags }}" role="status">{{ message }}</div>{% endfor %}
+{% if demo_mode and service == 'panel' %}<div class="notice">Mode pengembangan: provisioning membuat direktori lokal. Nginx dan akun Linux tidak diubah.</div>{% endif %}
+{% block content %}{% endblock %}</main>{% if request.user.is_authenticated and request.path != '/' %}</div>{% endif %}
+<footer><span>© {% now 'Y' %} {{ brand }}. Dibuat untuk ide yang bertumbuh.</span><span>{% if service == 'shop' %}<a href="/terms/">Ketentuan layanan</a> · {% endif %}Powered by MikaPanels ✦</span></footer>
+<script src="{% static 'js/app.js' %}" defer></script></body></html>
